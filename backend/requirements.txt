@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+python-multipart
+supabase
+boto3
+google-generativeai
+pillow
+python-magic
+yt-dlp
+slowapi
+pydantic-settings
+python-jose[cryptography]
+httpx
