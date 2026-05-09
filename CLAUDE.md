@@ -228,6 +228,8 @@ Implement in order. Do not advance phases without explicit instruction.
 
 ⚠️ **All implementation must be done in the `develop` branch. Never commit directly to `main`.**
 
+> Always create a new branch for each phase before starting implementation. Never implement multiple phases on the same branch.
+
 ### Commit Messages — [Conventional Commits](https://www.conventionalcommits.org/)
 
 | Type    | When                         |
@@ -241,6 +243,8 @@ Examples: `feat: add upload dropzone` / `fix: deduplicate damage values` / `chor
 
 ### Branch Names
 
+Keep branch names short and concise.
+
 ```
 feature/upload-dropzone
 fix/gemini-retry-on-timeout
@@ -253,7 +257,7 @@ chore/add-rate-limit-config
 git checkout -b feature/your-feature-name
 ```
 
-After implementation is complete, **stop and provide a summary of the implementation** in the following format, then notify the user:
+After each phase is complete, **always stop and provide a summary of the implementation** in the following format, then notify the user:
 
 ```
 ## Implementation Summary
