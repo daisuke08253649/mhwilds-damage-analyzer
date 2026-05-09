@@ -14,9 +14,12 @@ def get_current_user(
     authorization: Annotated[Optional[str], Header()] = None,
 ) -> Optional[str]:
     """JWT を検証して user_id を返す。未ログイン時は None を返す。"""
-    if not authorization or not authorization.startswith("Bearer "):
+    if not authorization:
         return None
-    token = authorization.removeprefix("Bearer ").strip()
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    token = token.strip()
     settings = get_settings()
     if not settings.supabase_jwt_secret:
         return None

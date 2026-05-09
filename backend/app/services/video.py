@@ -74,7 +74,11 @@ async def extract_frames(body: StreamingBody) -> AsyncIterator[tuple[int, int, I
             while True:
                 soi = buffer.find(_SOI)
                 if soi == -1:
-                    buffer.clear()
+                    # SOI がチャンク境界をまたぐ可能性があるため末尾 1 バイトだけ保持する
+                    if buffer and buffer[-1:] == _SOI[:1]:
+                        del buffer[:-1]
+                    else:
+                        buffer.clear()
                     break
                 eoi = buffer.find(_EOI, soi + 2)
                 if eoi == -1:
@@ -92,6 +96,10 @@ async def extract_frames(body: StreamingBody) -> AsyncIterator[tuple[int, int, I
                 except Exception as exc:
                     logger.warning("フレーム %d のデコードに失敗: %s", frame_index, exc)
                     frame_index += 1
+
+        returncode = await proc.wait()
+        if returncode != 0:
+            raise RuntimeError(f"ffmpeg が失敗しました (returncode={returncode})")
     finally:
         write_task.cancel()
         stderr_task.cancel()
@@ -106,16 +114,17 @@ async def extract_frames(body: StreamingBody) -> AsyncIterator[tuple[int, int, I
         # R2 ストリームを閉じる（同期 I/O のためスレッドで実行）
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, body.close)
-        # FFmpeg プロセスを終了させる
-        try:
-            proc.terminate()
-        except ProcessLookupError:
-            pass
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=5.0)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
+        # 正常終了済みでなければ FFmpeg プロセスを強制終了させる
+        if proc.returncode is None:
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
 
 
 async def download_youtube_to_r2(url: str, session_id: str) -> None:
