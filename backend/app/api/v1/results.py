@@ -3,7 +3,7 @@ import io
 import json
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import Response
 
 from app.db.supabase import get_supabase
 from app.schemas.analysis import DamageLogItem, DamageLogsResponse, SummaryResponse
@@ -13,8 +13,8 @@ router = APIRouter(prefix="/results", tags=["results"])
 
 @router.get("/{session_id}/summary", response_model=SummaryResponse)
 async def get_summary(session_id: str) -> SummaryResponse:
-    db = get_supabase()
-    result = db.table("analysis_sessions").select(
+    db = await get_supabase()
+    result = await db.table("analysis_sessions").select(
         "id, status, total_damage, max_damage, avg_damage, hit_count"
     ).eq("id", session_id).execute()
 
@@ -38,15 +38,14 @@ async def get_logs(
     page: int = Query(1, ge=1),
     limit: int = Query(100, ge=1, le=500),
 ) -> DamageLogsResponse:
-    db = get_supabase()
+    db = await get_supabase()
 
-    # セッション存在確認
-    session = db.table("analysis_sessions").select("id").eq("id", session_id).execute()
+    session = await db.table("analysis_sessions").select("id").eq("id", session_id).execute()
     if not session.data:
         raise HTTPException(status_code=404, detail="セッションが見つかりません")
 
     offset = (page - 1) * limit
-    result = db.table("damage_logs").select(
+    result = await db.table("damage_logs").select(
         "timestamp_ms, damage_value", count="exact"
     # supabase-py の range() は両端 inclusive: range(start, end) で end 件目まで取得
     ).eq("session_id", session_id).order("timestamp_ms").range(offset, offset + limit - 1).execute()
@@ -60,13 +59,13 @@ async def export_results(
     session_id: str,
     format: str = Query("json", pattern="^(json|csv)$"),
 ) -> Response:
-    db = get_supabase()
+    db = await get_supabase()
 
-    session = db.table("analysis_sessions").select("id").eq("id", session_id).execute()
+    session = await db.table("analysis_sessions").select("id").eq("id", session_id).execute()
     if not session.data:
         raise HTTPException(status_code=404, detail="セッションが見つかりません")
 
-    result = db.table("damage_logs").select(
+    result = await db.table("damage_logs").select(
         "timestamp_ms, damage_value"
     ).eq("session_id", session_id).order("timestamp_ms").execute()
 

@@ -103,7 +103,19 @@ async def extract_frames(body: StreamingBody) -> AsyncIterator[tuple[int, int, I
             await stderr_task
         except (asyncio.CancelledError, Exception):
             pass
-        await proc.wait()
+        # R2 ストリームを閉じる（同期 I/O のためスレッドで実行）
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, body.close)
+        # FFmpeg プロセスを終了させる
+        try:
+            proc.terminate()
+        except ProcessLookupError:
+            pass
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
 
 
 async def download_youtube_to_r2(url: str, session_id: str) -> None:

@@ -16,15 +16,15 @@ class Settings(BaseSettings):
     )
 
     supabase_url: str = ""
-    supabase_service_role_key: str = ""
-    supabase_jwt_secret: str = ""
+    supabase_service_role_key: str
+    supabase_jwt_secret: str
 
     r2_endpoint_url: str = ""
     r2_access_key_id: str = ""
-    r2_secret_access_key: str = ""
+    r2_secret_access_key: str
     r2_bucket_name: str = ""
 
-    gemini_api_key: str = ""
+    gemini_api_key: str
     ocr_backend: str = "gemini"
 
     allowed_origins: str = "http://localhost:3000"

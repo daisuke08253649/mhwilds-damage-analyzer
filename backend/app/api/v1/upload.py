@@ -7,7 +7,6 @@ from typing import Annotated, Optional
 import magic
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile
 
-from app.core.config import get_settings
 from app.core.security import get_current_user, limiter
 from app.core.sse import sse_manager
 from app.db.supabase import get_supabase
@@ -27,12 +26,12 @@ _YOUTUBE_RE = re.compile(
 
 async def _process_video(session_id: str, user_id: Optional[str]) -> None:
     """バックグラウンド処理: R2 → FFmpeg → OCR → DB 保存 → SSE 配信。"""
-    db = get_supabase()
+    db = await get_supabase()
     ocr = get_ocr_service()
     queue = sse_manager.get_or_create(session_id)
 
     try:
-        db.table("analysis_sessions").update({"status": "processing"}).eq("id", session_id).execute()
+        await db.table("analysis_sessions").update({"status": "processing"}).eq("id", session_id).execute()
 
         body = await r2.get_streaming_body(session_id)
         damage_values: list[int] = []
@@ -47,7 +46,7 @@ async def _process_video(session_id: str, user_id: Optional[str]) -> None:
                 damage_values.append(damage_value)
 
                 if user_id:
-                    db.table("damage_logs").insert({
+                    await db.table("damage_logs").insert({
                         "session_id": session_id,
                         "timestamp_ms": timestamp_ms,
                         "damage_value": damage_value,
@@ -66,19 +65,19 @@ async def _process_video(session_id: str, user_id: Optional[str]) -> None:
                 })
 
         summary = aggregator.compute_summary(damage_values)
-        db.table("analysis_sessions").update({
+        await db.table("analysis_sessions").update({
             "status": "done",
             "completed_at": datetime.now(timezone.utc).isoformat(),
-            **summary,
+            **summary.model_dump(),
         }).eq("id", session_id).execute()
 
-        await queue.put({"event": "done", "data": summary})
+        await queue.put({"event": "done", "data": summary.model_dump()})
         await queue.put(None)
 
     except Exception as exc:
         logger.error("セッション %s の処理に失敗: %s", session_id, exc)
         try:
-            db.table("analysis_sessions").update({"status": "error"}).eq("id", session_id).execute()
+            await db.table("analysis_sessions").update({"status": "error"}).eq("id", session_id).execute()
         except Exception:
             pass
         await queue.put({"event": "error", "data": {"message": str(exc)}})
@@ -102,8 +101,7 @@ async def upload_file(
     background_tasks: BackgroundTasks,
     user_id: Annotated[Optional[str], Depends(get_current_user)] = None,
 ) -> UploadFileResponse:
-    settings = get_settings()
-    db = get_supabase()
+    db = await get_supabase()
 
     # 拡張子チェック
     ext = Path(file.filename or "").suffix.lower()
@@ -121,7 +119,7 @@ async def upload_file(
     await file.seek(0)
 
     # DB にセッションレコード作成
-    result = db.table("analysis_sessions").insert({
+    result = await db.table("analysis_sessions").insert({
         "user_id": user_id,
         "video_name": file.filename,
         "video_source": "file",
@@ -133,7 +131,7 @@ async def upload_file(
     try:
         await r2.upload_fileobj(file.file, session_id)
     except Exception as exc:
-        db.table("analysis_sessions").update({"status": "error"}).eq("id", session_id).execute()
+        await db.table("analysis_sessions").update({"status": "error"}).eq("id", session_id).execute()
         raise HTTPException(status_code=500, detail="動画のアップロードに失敗しました") from exc
 
     background_tasks.add_task(_process_video, session_id=session_id, user_id=user_id)
@@ -149,12 +147,12 @@ async def upload_youtube(
     background_tasks: BackgroundTasks,
     user_id: Annotated[Optional[str], Depends(get_current_user)] = None,
 ) -> YoutubeUploadResponse:
-    db = get_supabase()
+    db = await get_supabase()
 
     if not _YOUTUBE_RE.match(str(body.url)):
         raise HTTPException(status_code=400, detail="有効な YouTube URL を入力してください")
 
-    result = db.table("analysis_sessions").insert({
+    result = await db.table("analysis_sessions").insert({
         "user_id": user_id,
         "video_name": str(body.url),
         "video_source": "youtube",
@@ -167,7 +165,8 @@ async def upload_youtube(
             await video.download_youtube_to_r2(url, sid)
         except Exception as exc:
             logger.error("YouTube ダウンロード失敗 (session=%s): %s", sid, exc)
-            db.table("analysis_sessions").update({"status": "error"}).eq("id", sid).execute()
+            pipeline_db = await get_supabase()
+            await pipeline_db.table("analysis_sessions").update({"status": "error"}).eq("id", sid).execute()
             queue = sse_manager.get_or_create(sid)
             await queue.put({"event": "error", "data": {"message": str(exc)}})
             await queue.put(None)

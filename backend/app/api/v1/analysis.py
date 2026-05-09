@@ -15,9 +15,9 @@ router = APIRouter(prefix="/analysis", tags=["analysis"])
 
 @router.get("/{session_id}/stream", response_class=EventSourceResponse)
 async def stream_analysis(session_id: str) -> AsyncIterable[ServerSentEvent]:
-    db = get_supabase()
+    db = await get_supabase()
 
-    result = db.table("analysis_sessions").select(
+    result = await db.table("analysis_sessions").select(
         "status, total_damage, max_damage, avg_damage, hit_count"
     ).eq("id", session_id).execute()
 

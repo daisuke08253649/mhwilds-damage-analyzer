@@ -1,6 +1,6 @@
 from typing import Annotated, Optional
 
-from fastapi import Header
+from fastapi import Depends, Header, HTTPException
 from jose import JWTError, jwt
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -17,8 +17,10 @@ def get_current_user(
     if not authorization or not authorization.startswith("Bearer "):
         return None
     token = authorization.removeprefix("Bearer ").strip()
+    settings = get_settings()
+    if not settings.supabase_jwt_secret:
+        return None
     try:
-        settings = get_settings()
         payload = jwt.decode(
             token,
             settings.supabase_jwt_secret,
@@ -28,3 +30,12 @@ def get_current_user(
         return payload.get("sub")
     except JWTError:
         return None
+
+
+def get_current_user_required(
+    user_id: Annotated[Optional[str], Depends(get_current_user)],
+) -> str:
+    """認証済みユーザーの user_id を返す。未認証は 401 を返す。"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="認証が必要です")
+    return user_id
