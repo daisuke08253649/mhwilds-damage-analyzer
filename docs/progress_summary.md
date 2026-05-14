@@ -1,6 +1,6 @@
 # 実装進捗サマリー
 
-最終更新: 2026-05-09
+最終更新: 2026-05-14
 
 ---
 
@@ -26,48 +26,53 @@
 - `app/api/v1/results.py`：サマリー・ログ・エクスポートエンドポイント
 - `app/api/v1/history.py`：解析履歴エンドポイント（要認証）
 - `app/main.py`：FastAPI アプリ本体（CORS・ミドルウェア・HealthResponse）
-- `.coderabbit.yaml`：CodeRabbit 全ブランチレビュー設定
-- PR #2（.coderabbit.yaml）→ `develop` マージ済み
 - PR #3（Phase 2 全実装 + CodeRabbit 2ラウンド修正）→ `develop` マージ済み
+
+### Phase 3 — フロントエンド実装（実装完了・レビュー待ち）
+
+ブランチ: `feature/phase3-frontend`
+
+**プロジェクト基盤**
+- `src/types/index.ts`：全共通型定義（AnalysisSession, DamageLog, DamageSummary, SSEイベント型 等）
+- `src/lib/supabase.ts`：ブラウザ用 Supabase クライアント（createBrowserClient）
+- `src/lib/auth.ts`：signIn / signUp / signOut / getUser / getSession / getAccessToken
+- `src/lib/api.ts`：FastAPI クライアント関数（uploadFile, uploadYouTube, getSessionSummary, getSessionLogs, getExportUrl, getHistory）
+- `src/lib/sse.ts`：SSE 接続ユーティリティ（connectSSE + SSEHandlers）
+- `src/proxy.ts`：`/history` 認証保護（Next.js 16 の proxy 規約）
+
+**共通コンポーネント**
+- `src/components/Providers.tsx`：QueryClientProvider ラッパー（クライアントコンポーネント）
+- `src/components/common/Header.tsx`：ナビゲーション（認証状態による表示切替）
+- `src/components/common/LoadingSpinner.tsx`：共通スピナー（sm/md/lg サイズ）
+- `src/components/common/ProgressBar.tsx`：オレンジグロー付き進捗バー
+- `src/components/common/AuthGuard.tsx`：クライアントサイド認証チェックラッパー
+
+**アップロード画面**
+- `src/app/page.tsx`：アップロードページ（Server Component）
+- `src/components/upload/UploadDropzone.tsx`：react-dropzone による D&D + バリデーション
+- `src/components/upload/VideoUrlInput.tsx`：YouTube URL 入力フォーム
+
+**解析画面**
+- `src/hooks/useAnalysisStream.ts`：SSE フック（damage/done/error イベント購読）
+- `src/components/analysis/DamageLogViewer.tsx`：@tanstack/react-virtual による仮想スクロール
+- `src/components/analysis/SummaryCard.tsx`：総ダメージ大表示 + 最大/平均/ヒット数
+- `src/components/analysis/ExportButton.tsx`：CSV/JSON エクスポートボタン
+- `src/app/analysis/[sessionId]/page.tsx`：解析ページ（Client Component、use(params) で sessionId 取得）
+
+**認証画面**
+- `src/app/auth/login/page.tsx`：ログインフォーム（useSearchParams を Suspense でラップ）
+- `src/app/auth/signup/page.tsx`：サインアップフォーム + メール確認案内
+
+**履歴画面**
+- `src/app/history/page.tsx`：解析履歴一覧テーブル
+
+**スタイリング**
+- `src/app/globals.css`：ダーク・インダストリアルテーマ（CSS 変数 + Tailwind v4 テーマ）
+- `src/app/layout.tsx`：Orbitron / Share Tech Mono / Exo 2 フォント、Providers・Header 統合
 
 ---
 
 ## 🔧 作業中・未完了のタスク
-
-### Phase 3 — フロントエンド実装（未着手）
-
-以下すべて未実装：
-
-**プロジェクト基盤**
-- `lib/supabase.ts`
-- `lib/auth.ts`
-- `lib/api.ts`
-- `lib/sse.ts`
-- `types/index.ts`
-- `middleware.ts`（`/history` を認証必須ルートとして保護）
-
-**共通コンポーネント**
-- `components/common/Header.tsx`
-- `components/common/AuthGuard.tsx`
-- `components/common/LoadingSpinner.tsx`
-- `components/common/ProgressBar.tsx`
-
-**アップロード画面（`app/page.tsx`）**
-- `components/upload/UploadDropzone.tsx`（react-dropzone）
-- `components/upload/VideoUrlInput.tsx`
-
-**解析画面（`app/analysis/[sessionId]/page.tsx`）**
-- `useAnalysisStream(sessionId)` カスタムフック
-- `components/analysis/DamageLogViewer.tsx`（@tanstack/react-virtual）
-- `components/analysis/SummaryCard.tsx`
-- `components/analysis/ExportButton.tsx`
-
-**認証画面**
-- `app/auth/login/page.tsx`
-- `app/auth/signup/page.tsx`
-
-**履歴画面**
-- `app/history/page.tsx`
 
 ### Phase 4 — デプロイ（未着手）
 ### Phase 5 — テスト・QA（未着手）
@@ -76,50 +81,20 @@
 
 ## 👉 次のアクション（再開時の起点）
 
-1. **フィーチャーブランチ作成**
-   ```bash
-   git checkout develop
-   git checkout -b feature/phase3-frontend
-   ```
-
-2. **必要パッケージのインストール**（`frontend/` ディレクトリで実行）
-   ```bash
-   npm install @supabase/supabase-js @supabase/ssr
-   npm install @tanstack/react-query @tanstack/react-virtual
-   npm install react-dropzone
-   npm install --save-dev @types/react-dropzone
-   ```
-
-3. **Context7 でライブラリ最新 docs を確認してから実装開始**
-   - `@supabase/ssr`（Next.js App Router 向け SSR クライアント初期化）
-   - `@tanstack/react-query`（QueryClientProvider の配置）
-   - `@tanstack/react-virtual`（useVirtualizer の API）
-   - `react-dropzone`（useDropzone の API）
-
-4. **実装順序**（依存関係の少ないものから）
-   1. `types/index.ts`
-   2. `lib/supabase.ts` + `lib/auth.ts`
-   3. `lib/api.ts` + `lib/sse.ts`
-   4. `middleware.ts`
-   5. 共通コンポーネント（Header, LoadingSpinner, ProgressBar, AuthGuard）
-   6. `app/layout.tsx` 更新（QueryClientProvider, Header）
-   7. アップロード画面（`page.tsx`, UploadDropzone, VideoUrlInput）
-   8. 解析画面（useAnalysisStream, DamageLogViewer, SummaryCard, ExportButton）
-   9. 認証画面（login, signup）
-   10. 履歴画面（history）
+1. **Phase 3 コードレビュー（OpenCode）の結果を受け取る**
+2. フィードバックがあれば修正 → 再レビュー → マージ
+3. PR 作成 → `develop` にマージ
+4. Phase 4 デプロイに進む
 
 ---
 
 ## ⚠️ 懸念事項・確認が必要な点
 
-1. **`frontend-design/SKILL.md` が存在しない**
-   CLAUDE.md では「フロントエンドコードを書く前に `frontend-design/SKILL.md` を読むこと」と指示されているが、リポジトリに該当ファイルが見当たらない。再開時にユーザーに確認するか、存在する場合はパスを教えてもらう。
+1. **環境変数の設定状況**
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_BASE_URL` が `.env.local` に設定されているか確認が必要。
 
-2. **Next.js 16.2.4 の破壊的変更**
-   `frontend/AGENTS.md` に「トレーニングデータと異なる破壊的変更がある」と警告あり。`node_modules/next/dist/docs/` を参照必須。特に `params` が `Promise<{...}>` になっている点（Next.js 15 以降）は確認済み。
+2. **Supabase ローカル環境の稼働状況**
+   動作確認には `supabase start`（Docker 必要）とバックエンド起動が前提。
 
-3. **環境変数の設定状況**
-   フロントエンドが必要とする環境変数（`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_BASE_URL`）が `.env.local` に設定済みか確認が必要。
-
-4. **Supabase ローカル環境の稼働状況**
-   フロントエンドを動作確認するには `supabase start`（Docker 必要）とバックエンドの起動が前提。ローカルで動作確認できる環境か確認が必要。
+3. **`useVirtualizer` と React Compiler の警告**
+   ESLint で `react-hooks/incompatible-library` 警告が出るが、動作への影響なし（React Compiler がこのコンポーネントのメモ化をスキップするのみ）。
