@@ -1,22 +1,23 @@
 'use client'
 
+import React from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { signOut } from '@/lib/auth'
 
-export function Header() {
+export function Header(): React.JSX.Element {
   const pathname = usePathname()
   const router = useRouter()
   const { user } = useAuth()
 
-  async function handleSignOut() {
+  async function handleSignOut(): Promise<void> {
     await signOut()
     router.push('/')
     router.refresh()
   }
 
-  const navLink = (href: string, label: string) => (
+  const navLink = (href: string, label: string): React.JSX.Element => (
     <Link
       href={href}
       className={`text-sm font-medium tracking-widest uppercase transition-colors ${

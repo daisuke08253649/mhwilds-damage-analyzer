@@ -35,10 +35,9 @@ export function connectSSE(url: string, handlers: SSEHandlers): () => void {
     if (e instanceof MessageEvent) {
       const data = safeParse<SSEErrorEvent>(e.data, () => handlers.onConnectionError?.())
       if (data) handlers.onError(data)
-    } else {
-      handlers.onConnectionError?.()
+      es.close()
     }
-    es.close()
+    // Connection-level errors are handled exclusively by onerror below
   })
 
   es.onerror = () => {

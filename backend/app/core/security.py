@@ -28,7 +28,7 @@ def get_current_user(
             token,
             settings.supabase_jwt_secret,
             algorithms=["HS256"],
-            options={"verify_aud": False},
+            audience="authenticated",
         )
         return payload.get("sub")
     except JWTError:

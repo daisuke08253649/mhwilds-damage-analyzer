@@ -1,10 +1,12 @@
 import csv
 import io
 import json
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
+from app.core.security import get_current_user
 from app.db.supabase import get_supabase
 from app.schemas.analysis import DamageLogItem, DamageLogsResponse, SummaryResponse
 
@@ -12,16 +14,22 @@ router = APIRouter(prefix="/results", tags=["results"])
 
 
 @router.get("/{session_id}/summary", response_model=SummaryResponse)
-async def get_summary(session_id: str) -> SummaryResponse:
+async def get_summary(
+    session_id: str,
+    user_id: Annotated[Optional[str], Depends(get_current_user)],
+) -> SummaryResponse:
     db = await get_supabase()
     result = await db.table("analysis_sessions").select(
-        "id, status, total_damage, max_damage, avg_damage, hit_count"
+        "id, status, total_damage, max_damage, avg_damage, hit_count, user_id"
     ).eq("id", session_id).execute()
 
     if not result.data:
         raise HTTPException(status_code=404, detail="セッションが見つかりません")
 
     s = result.data[0]
+    if s["user_id"] is not None and s["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="アクセス権限がありません")
+
     return SummaryResponse(
         session_id=s["id"],
         total_damage=s["total_damage"] or 0,
@@ -35,14 +43,19 @@ async def get_summary(session_id: str) -> SummaryResponse:
 @router.get("/{session_id}/logs", response_model=DamageLogsResponse)
 async def get_logs(
     session_id: str,
+    user_id: Annotated[Optional[str], Depends(get_current_user)],
     page: int = Query(1, ge=1),
     limit: int = Query(100, ge=1, le=500),
 ) -> DamageLogsResponse:
     db = await get_supabase()
 
-    session = await db.table("analysis_sessions").select("id").eq("id", session_id).execute()
+    session = await db.table("analysis_sessions").select("id, user_id").eq("id", session_id).execute()
     if not session.data:
         raise HTTPException(status_code=404, detail="セッションが見つかりません")
+
+    s = session.data[0]
+    if s["user_id"] is not None and s["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="アクセス権限がありません")
 
     offset = (page - 1) * limit
     result = await db.table("damage_logs").select(
@@ -57,13 +70,18 @@ async def get_logs(
 @router.get("/{session_id}/export")
 async def export_results(
     session_id: str,
+    user_id: Annotated[Optional[str], Depends(get_current_user)],
     format: str = Query("json", pattern="^(json|csv)$"),
 ) -> Response:
     db = await get_supabase()
 
-    session = await db.table("analysis_sessions").select("id").eq("id", session_id).execute()
+    session = await db.table("analysis_sessions").select("id, user_id").eq("id", session_id).execute()
     if not session.data:
         raise HTTPException(status_code=404, detail="セッションが見つかりません")
+
+    s = session.data[0]
+    if s["user_id"] is not None and s["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="アクセス権限がありません")
 
     result = await db.table("damage_logs").select(
         "timestamp_ms, damage_value"

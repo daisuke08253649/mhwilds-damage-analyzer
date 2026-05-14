@@ -26,7 +26,14 @@ export function ProgressBar({ value, label, showPercent = true }: ProgressBarPro
           )}
         </div>
       )}
-      <div className="h-1.5 w-full rounded-full bg-[var(--surface-2)] overflow-hidden">
+      <div
+        className="h-1.5 w-full rounded-full bg-[var(--surface-2)] overflow-hidden"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={clamped}
+        aria-label={label ?? '進行状況'}
+      >
         <div
           className="h-full rounded-full transition-all duration-300 ease-out"
           style={{

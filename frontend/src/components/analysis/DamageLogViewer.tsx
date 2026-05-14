@@ -31,7 +31,8 @@ export function DamageLogViewer({ entries, streaming }: DamageLogViewerProps) {
     if (streaming && entries.length > 0) {
       virtualizer.scrollToIndex(entries.length - 1, { behavior: 'smooth' })
     }
-  }, [entries.length, streaming, virtualizer])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries.length, streaming])
 
   if (entries.length === 0) {
     return (

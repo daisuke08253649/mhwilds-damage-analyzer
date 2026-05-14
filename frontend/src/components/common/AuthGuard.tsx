@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import React, { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
@@ -10,7 +10,7 @@ interface AuthGuardProps {
   redirectTo?: string
 }
 
-export function AuthGuard({ children, redirectTo = '/auth/login' }: AuthGuardProps) {
+export function AuthGuard({ children, redirectTo = '/auth/login' }: AuthGuardProps): React.JSX.Element | null {
   const router = useRouter()
   const { user, loading } = useAuth()
 

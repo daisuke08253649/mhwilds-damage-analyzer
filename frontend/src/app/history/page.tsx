@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
@@ -32,7 +33,7 @@ const statusColor: Record<AnalysisSession['status'], string> = {
   error: 'text-[var(--danger)]',
 }
 
-export default function HistoryPage() {
+export default function HistoryPage(): React.JSX.Element {
   const { user } = useAuth()
 
   const {

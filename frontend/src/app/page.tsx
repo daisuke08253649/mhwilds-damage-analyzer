@@ -1,7 +1,8 @@
+import React from 'react'
 import { UploadDropzone } from '@/components/upload/UploadDropzone'
 import { VideoUrlInput } from '@/components/upload/VideoUrlInput'
 
-export default function HomePage() {
+export default function HomePage(): React.JSX.Element {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-4 py-16">
       <div className="w-full max-w-xl flex flex-col gap-10">
