@@ -1,35 +1,36 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { uploadYouTube } from '@/lib/api'
-import { getAccessToken } from '@/lib/auth'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { uploadYouTube } from "@/lib/api";
+import { getAccessToken } from "@/lib/auth";
 
-const YOUTUBE_PATTERN = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/
+const YOUTUBE_PATTERN =
+  /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/;
 
 export function VideoUrlInput() {
-  const router = useRouter()
-  const [url, setUrl] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const router = useRouter();
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
+    e.preventDefault();
+    setError(null);
 
     if (!YOUTUBE_PATTERN.test(url)) {
-      setError('有効な YouTube URL を入力してください')
-      return
+      setError("有効な YouTube URL を入力してください");
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
     try {
-      const token = await getAccessToken()
-      const { session_id } = await uploadYouTube(url, token)
-      router.push(`/analysis/${session_id}`)
+      const token = await getAccessToken();
+      const { session_id } = await uploadYouTube(url, token);
+      router.push(`/analysis/${session_id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'URL の送信に失敗しました')
-      setLoading(false)
+      setError(err instanceof Error ? err.message : "URL の送信に失敗しました");
+      setLoading(false);
     }
   }
 
@@ -52,32 +53,18 @@ export function VideoUrlInput() {
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://www.youtube.com/watch?v=..."
             disabled={loading}
-            className="
-              w-full pl-10 pr-4 py-3 rounded-lg text-sm
-              bg-[var(--surface-2)] border border-[var(--border)]
-              text-[var(--text)] placeholder-[var(--text-muted)]
-              focus:outline-none focus:border-[var(--accent)]
-              transition-colors disabled:opacity-50
-            "
+            className="w-full pl-10 pr-4 py-3 rounded-lg text-sm bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] transition-colors disabled:opacity-50"
           />
         </div>
         <button
           type="submit"
           disabled={loading || !url.trim()}
-          className="
-            px-5 py-3 rounded-lg text-sm font-semibold tracking-widest uppercase
-            bg-[var(--accent)] text-white
-            hover:brightness-110 active:brightness-95
-            disabled:opacity-40 disabled:cursor-not-allowed
-            transition-all
-          "
+          className="px-5 py-3 rounded-lg text-sm font-semibold tracking-widest uppercase bg-[var(--accent)] text-white hover:brightness-110 active:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
         >
-          {loading ? '送信中...' : '解析'}
+          {loading ? "送信中..." : "解析"}
         </button>
       </div>
-      {error && (
-        <p className="mt-2 text-sm text-[var(--danger)]">{error}</p>
-      )}
+      {error && <p className="mt-2 text-sm text-[var(--danger)]">{error}</p>}
     </form>
-  )
+  );
 }
