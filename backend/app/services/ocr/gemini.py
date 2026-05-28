@@ -20,7 +20,7 @@ _PROMPT = (
 )
 
 _MAX_RETRIES = 3
-_MODEL = "gemini-1.5-flash"
+_MODEL = "gemini-3.1-flash-lite"
 
 
 class GeminiOCRService(OCRServiceBase):
@@ -56,7 +56,11 @@ class GeminiOCRService(OCRServiceBase):
                 _PROMPT,
             ],
         )
-        text = response.text
+        try:
+            text = response.text
+        except Exception as exc:
+            logger.warning("Gemini のレスポンスへのアクセスに失敗しました (safety filter または SDK エラー): %s", exc)
+            raise RuntimeError("Gemini response was blocked by safety filter") from exc
         if text is None:
             logger.warning("Gemini のレスポンスがセーフティフィルターによりブロックされました")
             raise RuntimeError("Gemini response was blocked by safety filter")
