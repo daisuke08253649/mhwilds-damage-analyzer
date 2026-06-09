@@ -19,7 +19,7 @@ async def get_history(
     offset = (page - 1) * limit
 
     result = await db.table("analysis_sessions").select(
-        "id, video_name, total_damage, created_at", count="exact"
+        "id, video_name, total_damage, status, created_at", count="exact"
     ).eq("user_id", user_id).order("created_at", desc=True).range(offset, offset + limit - 1).execute()
 
     sessions = [
@@ -27,6 +27,7 @@ async def get_history(
             id=s["id"],
             video_name=s["video_name"],
             total_damage=s["total_damage"],
+            status=s["status"],
             created_at=s["created_at"],
         )
         for s in result.data

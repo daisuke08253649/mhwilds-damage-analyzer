@@ -1,4 +1,4 @@
-import type { AnalysisSession, DamageSummary, PaginatedLogs, UploadResponse } from '@/types'
+import type { DamageSummary, HistoryItem, PaginatedLogs, UploadResponse } from '@/types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? ''
 
@@ -88,10 +88,11 @@ export async function exportSession(
   URL.revokeObjectURL(url)
 }
 
-export async function getHistory(token: string): Promise<AnalysisSession[]> {
+export async function getHistory(token: string): Promise<HistoryItem[]> {
   const res = await fetch(`${API_BASE}/api/v1/history`, {
     headers: authHeaders(token),
   })
   if (!res.ok) throw new Error('履歴の取得に失敗しました')
-  return res.json()
+  const data = await res.json()
+  return data.sessions ?? []
 }
