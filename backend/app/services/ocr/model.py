@@ -62,7 +62,6 @@ class OpenRouterOCRService(OCRServiceBase):
                 else:
                     logger.error("OpenRouter OCR failed after %d attempts: %s", _MAX_RETRIES, exc)
                     raise
-        return OCRResult()
 
     @staticmethod
     def _parse(text: str) -> OCRResult:
