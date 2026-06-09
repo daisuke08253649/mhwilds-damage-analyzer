@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, HttpUrl
@@ -59,6 +59,7 @@ class HistorySessionItem(BaseModel):
     id: UUID
     video_name: Optional[str]
     total_damage: Optional[int]
+    status: Literal['pending', 'processing', 'done', 'error']
     created_at: datetime
 
 

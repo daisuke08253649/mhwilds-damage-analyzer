@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { getHistory } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
-import type { AnalysisSession } from '@/types'
+import type { HistoryItem } from '@/types'
 
 function formatDate(dateStr: string): string {
   return new Intl.DateTimeFormat('ja-JP', {
@@ -19,14 +19,14 @@ function formatDate(dateStr: string): string {
   }).format(new Date(dateStr))
 }
 
-const statusLabel: Record<AnalysisSession['status'], string> = {
+const statusLabel: Record<HistoryItem['status'], string> = {
   pending: '待機中',
   processing: '処理中',
   done: '完了',
   error: 'エラー',
 }
 
-const statusColor: Record<AnalysisSession['status'], string> = {
+const statusColor: Record<HistoryItem['status'], string> = {
   pending: 'text-[var(--text-muted)]',
   processing: 'text-[var(--accent)]',
   done: 'text-[var(--success)]',

@@ -164,13 +164,19 @@ async def upload_youtube(
         try:
             await video.download_youtube_to_r2(url, sid)
         except Exception as exc:
-            logger.error("YouTube ダウンロード失敗 (session=%s): %s", sid, exc)
+            logger.exception("YouTube ダウンロード失敗 (session=%s)", sid)
             pipeline_db = await get_supabase()
-            await pipeline_db.table("analysis_sessions").update({"status": "error"}).eq("id", sid).execute()
+            try:
+                await pipeline_db.table("analysis_sessions").update({"status": "error"}).eq("id", sid).execute()
+            except Exception:
+                logger.exception("analysis_sessions の error 更新に失敗 (session=%s)", sid)
             queue = sse_manager.get_or_create(sid)
-            await queue.put({"event": "error", "data": {"message": str(exc)}})
-            await queue.put(None)
-            sse_manager.remove(sid)
+            error_message = str(exc) if str(exc) else type(exc).__name__
+            try:
+                await queue.put({"event": "error", "data": {"message": error_message}})
+                await queue.put(None)
+            finally:
+                sse_manager.remove(sid)
             return
         await _process_video(sid, uid)  # _process_video の finally で remove される
 

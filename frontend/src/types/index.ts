@@ -57,3 +57,11 @@ export interface PaginatedLogs {
   page: number
   page_size: number
 }
+
+export interface HistoryItem {
+  id: string
+  video_name: string | null
+  total_damage: number | null
+  status: 'pending' | 'processing' | 'done' | 'error'
+  created_at: string
+}

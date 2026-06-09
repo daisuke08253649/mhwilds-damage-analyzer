@@ -15,6 +15,6 @@ def compute_summary(damage_values: list[int]) -> DoneEventData:
     return DoneEventData(
         total_damage=total,
         max_damage=max(damage_values),
-        avg_damage=round(total / len(damage_values), 2),
+        avg_damage=round(total / len(damage_values), 2),  # banker's rounding（Python標準）で小数点以下2桁
         hit_count=len(damage_values),
     )

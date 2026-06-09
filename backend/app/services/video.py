@@ -1,5 +1,8 @@
 import asyncio
+import concurrent.futures
 import logging
+import subprocess
+import threading
 from io import BytesIO
 from typing import AsyncIterator
 
@@ -12,150 +15,214 @@ _SOI = b"\xff\xd8"
 _EOI = b"\xff\xd9"
 _CHUNK_SIZE = 1024 * 1024  # 1 MB
 _FPS = 2
-
-
-async def _drain_stderr(proc: asyncio.subprocess.Process) -> None:
-    """FFmpeg の stderr を読み取り、エラー出力をログに残す。"""
-    assert proc.stderr is not None
-    while True:
-        line = await proc.stderr.readline()
-        if not line:
-            break
-        logger.debug("FFmpeg: %s", line.decode("utf-8", errors="replace").rstrip())
-
-
-async def _write_stdin(proc: asyncio.subprocess.Process, body: StreamingBody) -> None:
-    """R2 StreamingBody を FFmpeg の stdin にストリーミングする（別タスクで実行）。"""
-    loop = asyncio.get_event_loop()
-    try:
-        while True:
-            chunk = await loop.run_in_executor(None, body.read, _CHUNK_SIZE)
-            if not chunk:
-                break
-            proc.stdin.write(chunk)
-            await proc.stdin.drain()
-    finally:
-        proc.stdin.close()
-        await proc.stdin.wait_closed()
+_SENTINEL = object()
 
 
 async def extract_frames(body: StreamingBody) -> AsyncIterator[tuple[int, int, Image.Image]]:
-    """
-    R2 StreamingBody から FFmpeg を通じて JPEG フレームを抽出する。
-    (frame_index, timestamp_ms, PIL.Image) のタプルを yield する。
-    フレームはメモリ上のみで処理し、ディスクには書き込まない。
-    """
-    proc = await asyncio.create_subprocess_exec(
-        "ffmpeg",
-        "-i", "pipe:0",
-        "-vf", f"fps={_FPS}",
-        "-f", "image2pipe",
-        "-vcodec", "mjpeg",
-        "-q:v", "3",
-        "pipe:1",
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    """R2 StreamingBody から FFmpeg でフレームを抽出し (frame_index, timestamp_ms, image) を yield する。"""
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=10)
+    stop_event = threading.Event()
 
-    write_task = asyncio.create_task(_write_stdin(proc, body))
-    stderr_task = asyncio.create_task(_drain_stderr(proc))
+    def _enqueue(item: object) -> None:
+        """スレッドから asyncio キューに積む。stop_event が立ったら即返す。"""
+        if stop_event.is_set():
+            return
+        try:
+            fut = asyncio.run_coroutine_threadsafe(queue.put(item), loop)
+            while not stop_event.is_set():
+                try:
+                    fut.result(timeout=0.1)
+                    return
+                except concurrent.futures.TimeoutError:
+                    continue
+            fut.cancel()
+        except Exception:
+            pass
+
+    def producer() -> None:
+        try:
+            try:
+                proc = subprocess.Popen(
+                    [
+                        "ffmpeg",
+                        "-i", "pipe:0",
+                        "-vf", f"fps={_FPS}",
+                        "-f", "image2pipe",
+                        "-vcodec", "mjpeg",
+                        "-q:v", "3",
+                        "pipe:1",
+                    ],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+            except FileNotFoundError as exc:
+                raise RuntimeError("ffmpeg がインストールされていません") from exc
+
+            stderr_chunks: list[bytes] = []
+
+            def read_stderr() -> None:
+                assert proc.stderr is not None
+                try:
+                    while True:
+                        chunk = proc.stderr.read(4096)
+                        if not chunk:
+                            break
+                        stderr_chunks.append(chunk)
+                except Exception:
+                    pass
+
+            def write_stdin() -> None:
+                try:
+                    while not stop_event.is_set():
+                        chunk = body.read(_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        proc.stdin.write(chunk)
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        proc.stdin.close()
+                    except Exception:
+                        pass
+
+            stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+            stderr_thread.start()
+            write_thread = threading.Thread(target=write_stdin, daemon=True)
+            write_thread.start()
+
+            buffer = bytearray()
+            frame_index = 0
+
+            while not stop_event.is_set():
+                chunk = proc.stdout.read(65536)
+                if not chunk:
+                    break
+                buffer += chunk
+
+                while not stop_event.is_set():
+                    soi = buffer.find(_SOI)
+                    if soi == -1:
+                        # SOI がチャンク境界をまたぐ可能性があるため末尾 1 バイトだけ保持する
+                        if buffer and buffer[-1:] == _SOI[:1]:
+                            del buffer[:-1]
+                        else:
+                            buffer.clear()
+                        break
+                    eoi = buffer.find(_EOI, soi + 2)
+                    if eoi == -1:
+                        if soi > 0:
+                            del buffer[:soi]
+                        break
+                    jpeg_data = bytes(buffer[soi : eoi + 2])
+                    del buffer[: eoi + 2]
+                    try:
+                        image = Image.open(BytesIO(jpeg_data))
+                        image.load()
+                        timestamp_ms = frame_index * (1000 // _FPS)
+                        _enqueue((frame_index, timestamp_ms, image))
+                        frame_index += 1
+                    except Exception as exc:
+                        logger.warning("フレーム %d のデコードに失敗: %s", frame_index, exc)
+                        frame_index += 1
+
+            write_thread.join(timeout=5)
+            stderr_thread.join(timeout=5)
+
+            if proc.returncode is None:
+                try:
+                    proc.terminate()
+                except ProcessLookupError:
+                    pass
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+
+            if not stop_event.is_set() and proc.returncode != 0:
+                stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace").strip()
+                detail = f": {stderr_text[-500:]}" if stderr_text else ""
+                logger.error("ffmpeg stderr: %s", stderr_text)
+                raise RuntimeError(f"ffmpeg が失敗しました (returncode={proc.returncode}){detail}")
+
+        except Exception as exc:
+            _enqueue(exc)
+            return
+
+        _enqueue(_SENTINEL)
+
+    future = loop.run_in_executor(None, producer)
 
     try:
-        buffer = bytearray()
-        frame_index = 0
-
         while True:
-            chunk = await proc.stdout.read(65536)
-            if not chunk:
+            item = await queue.get()
+            if item is _SENTINEL:
                 break
-            buffer += chunk
-
-            while True:
-                soi = buffer.find(_SOI)
-                if soi == -1:
-                    # SOI がチャンク境界をまたぐ可能性があるため末尾 1 バイトだけ保持する
-                    if buffer and buffer[-1:] == _SOI[:1]:
-                        del buffer[:-1]
-                    else:
-                        buffer.clear()
-                    break
-                eoi = buffer.find(_EOI, soi + 2)
-                if eoi == -1:
-                    if soi > 0:
-                        del buffer[:soi]
-                    break
-                jpeg_data = bytes(buffer[soi : eoi + 2])
-                del buffer[: eoi + 2]
-                try:
-                    image = Image.open(BytesIO(jpeg_data))
-                    image.load()
-                    timestamp_ms = frame_index * (1000 // _FPS)
-                    yield frame_index, timestamp_ms, image
-                    frame_index += 1
-                except Exception as exc:
-                    logger.warning("フレーム %d のデコードに失敗: %s", frame_index, exc)
-                    frame_index += 1
-
-        returncode = await proc.wait()
-        if returncode != 0:
-            raise RuntimeError(f"ffmpeg が失敗しました (returncode={returncode})")
+            if isinstance(item, Exception):
+                raise item
+            yield item
     finally:
-        write_task.cancel()
-        stderr_task.cancel()
-        try:
-            await write_task
-        except (asyncio.CancelledError, Exception):
-            pass
-        try:
-            await stderr_task
-        except (asyncio.CancelledError, Exception):
-            pass
-        # R2 ストリームを閉じる（同期 I/O のためスレッドで実行）
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, body.close)
-        # 正常終了済みでなければ FFmpeg プロセスを強制終了させる
-        if proc.returncode is None:
+        stop_event.set()
+        # キューを排出して _enqueue のブロックを解除する
+        while True:
             try:
-                proc.terminate()
-            except ProcessLookupError:
-                pass
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
+                queue.get_nowait()
+            except Exception:
+                break
+        run_loop = asyncio.get_running_loop()
+        await run_loop.run_in_executor(None, body.close)
+        try:
+            await asyncio.wrap_future(future)
+        except Exception:
+            pass
 
 
 async def download_youtube_to_r2(url: str, session_id: str) -> None:
     """yt-dlp で YouTube 動画をダウンロードし R2 に保存する。"""
     import os
+    import shutil
     import tempfile
 
     from app.services import r2
 
-    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
-        tmp_path = tmp.name
+    # NamedTemporaryFile で事前に空ファイルを作ると Windows で yt-dlp の rename が
+    # 失敗し 0 バイトファイルが R2 にアップロードされる問題を避けるため mkdtemp を使う
+    tmp_dir = tempfile.mkdtemp()
+    tmp_path = os.path.join(tmp_dir, "video.mp4")
 
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "yt-dlp",
-            "-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]",
-            "--merge-output-format", "mp4",
-            "-o", tmp_path,
-            "--no-playlist",
-            url,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await proc.wait()
-        if proc.returncode != 0:
-            raise RuntimeError(f"yt-dlp が失敗しました (returncode={proc.returncode})")
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                [
+                    "yt-dlp",
+                    "-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]",
+                    "--merge-output-format", "mp4",
+                    "-o", tmp_path,
+                    "--no-playlist",
+                    url,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                timeout=600,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("yt-dlp がタイムアウトしました (600秒)") from exc
+        except FileNotFoundError as exc:
+            raise RuntimeError("yt-dlp がインストールされていません (pip install yt-dlp)") from exc
+
+        if result.returncode != 0:
+            stderr_text = (result.stderr or b"").decode("utf-8", errors="replace").strip()
+            detail = f": {stderr_text[:300]}" if stderr_text else ""
+            raise RuntimeError(f"yt-dlp が失敗しました (returncode={result.returncode}){detail}")
+
+        if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
+            raise RuntimeError("yt-dlp が動画ファイルを生成しませんでした")
 
         with open(tmp_path, "rb") as f:
             await r2.upload_fileobj(f, session_id)
     finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
+        shutil.rmtree(tmp_dir, ignore_errors=True)
