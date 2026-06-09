@@ -65,8 +65,9 @@ After `supabase start`, fill in the printed keys. See the table below for all va
 | `SUPABASE_SERVICE_ROLE_KEY`                                                        | Backend  | `supabase start` output                          |
 | `SUPABASE_JWT_SECRET`                                                              | Backend  | `supabase start` output                          |
 | `R2_ENDPOINT_URL` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` | Backend  | Cloudflare dashboard                             |
-| `GEMINI_API_KEY`                                                                   | Backend  | [Google AI Studio](https://aistudio.google.com/) |
-| `OCR_BACKEND`                                                                      | Backend  | `gemini` (default) or `finetuned`                |
+| `OPENROUTER_API_KEY`                                                               | Backend  | [OpenRouter](https://openrouter.ai/)             |
+| `OPENROUTER_MODEL`                                                                 | Backend  | `google/gemma-4-26b-a4b-it:free` (default)       |
+| `OCR_BACKEND`                                                                      | Backend  | `openrouter` (default) or `finetuned`            |
 
 ## Architecture
 

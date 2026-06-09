@@ -1,10 +1,10 @@
 import asyncio
+import base64
 import json
 import logging
 from io import BytesIO
 
-from google import genai
-from google.genai import types
+from openai import AsyncOpenAI
 from PIL import Image
 
 from app.services.ocr.base import OCRResult, OCRServiceBase
@@ -18,52 +18,54 @@ _PROMPT = (
     'If no damage numbers are visible, return {"damages": []}. '
     "Do not include any other text."
 )
-
 _MAX_RETRIES = 3
-_MODEL = "gemini-3.1-flash-lite"
 
 
-class GeminiOCRService(OCRServiceBase):
-    def __init__(self, api_key: str) -> None:
-        self._client = genai.Client(api_key=api_key)
+class OpenRouterOCRService(OCRServiceBase):
+    def __init__(self, api_key: str, model: str) -> None:
+        self._client = AsyncOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+        )
+        self._model = model
 
     async def recognize(self, frame: Image.Image) -> OCRResult:
+        buf = BytesIO()
+        frame.save(buf, format="JPEG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        data_url = f"data:image/jpeg;base64,{b64}"
+
         for attempt in range(_MAX_RETRIES):
             try:
-                return await asyncio.to_thread(self._recognize_sync, frame)
+                response = await self._client.chat.completions.create(
+                    model=self._model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": _PROMPT},
+                                {"type": "image_url", "image_url": {"url": data_url}},
+                            ],
+                        }
+                    ],
+                )
+                text = response.choices[0].message.content or ""
+                return self._parse(text)
             except Exception as exc:
                 if attempt < _MAX_RETRIES - 1:
                     wait = 2**attempt
                     logger.warning(
-                        "Gemini OCR attempt %d failed, retrying in %ds: %s",
+                        "OpenRouter OCR attempt %d failed, retrying in %ds: %s",
                         attempt + 1, wait, exc,
                     )
                     await asyncio.sleep(wait)
                 else:
-                    logger.error("Gemini OCR failed after %d attempts: %s", _MAX_RETRIES, exc)
+                    logger.error("OpenRouter OCR failed after %d attempts: %s", _MAX_RETRIES, exc)
                     raise
         return OCRResult()
 
-    def _recognize_sync(self, frame: Image.Image) -> OCRResult:
-        buf = BytesIO()
-        frame.save(buf, format="JPEG")
-        image_bytes = buf.getvalue()
-
-        response = self._client.models.generate_content(
-            model=_MODEL,
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                _PROMPT,
-            ],
-        )
-        try:
-            text = response.text
-        except Exception as exc:
-            logger.warning("Gemini のレスポンスへのアクセスに失敗しました (safety filter または SDK エラー): %s", exc)
-            raise RuntimeError("Gemini response was blocked by safety filter") from exc
-        if text is None:
-            logger.warning("Gemini のレスポンスがセーフティフィルターによりブロックされました")
-            raise RuntimeError("Gemini response was blocked by safety filter")
+    @staticmethod
+    def _parse(text: str) -> OCRResult:
         text = text.strip()
 
         # マークダウンコードブロックを除去

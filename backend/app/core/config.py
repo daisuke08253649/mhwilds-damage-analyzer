@@ -24,8 +24,9 @@ class Settings(BaseSettings):
     r2_secret_access_key: str
     r2_bucket_name: str = ""
 
-    gemini_api_key: str
-    ocr_backend: str = "gemini"
+    openrouter_api_key: str
+    openrouter_model: str = "google/gemma-4-26b-a4b-it:free"
+    ocr_backend: str = "openrouter"
 
     allowed_origins: str = "http://localhost:3000"
     max_upload_size_mb: int = 2048
