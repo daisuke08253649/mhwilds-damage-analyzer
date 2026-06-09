@@ -4,7 +4,7 @@ import json
 import logging
 from io import BytesIO
 
-from openai import AsyncOpenAI
+from openrouter import OpenRouter
 from PIL import Image
 
 from app.services.ocr.base import OCRResult, OCRServiceBase
@@ -23,10 +23,7 @@ _MAX_RETRIES = 3
 
 class OpenRouterOCRService(OCRServiceBase):
     def __init__(self, api_key: str, model: str) -> None:
-        self._client = AsyncOpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=api_key,
-        )
+        self._api_key = api_key
         self._model = model
 
     async def recognize(self, frame: Image.Image) -> OCRResult:
@@ -35,33 +32,34 @@ class OpenRouterOCRService(OCRServiceBase):
         b64 = base64.b64encode(buf.getvalue()).decode()
         data_url = f"data:image/jpeg;base64,{b64}"
 
-        for attempt in range(_MAX_RETRIES):
-            try:
-                response = await self._client.chat.completions.create(
-                    model=self._model,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": _PROMPT},
-                                {"type": "image_url", "image_url": {"url": data_url}},
-                            ],
-                        }
-                    ],
-                )
-                text = response.choices[0].message.content or ""
-                return self._parse(text)
-            except Exception as exc:
-                if attempt < _MAX_RETRIES - 1:
-                    wait = 2**attempt
-                    logger.warning(
-                        "OpenRouter OCR attempt %d failed, retrying in %ds: %s",
-                        attempt + 1, wait, exc,
+        async with OpenRouter(api_key=self._api_key) as client:
+            for attempt in range(_MAX_RETRIES):
+                try:
+                    response = await client.chat.send_async(
+                        model=self._model,
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": _PROMPT},
+                                    {"type": "image_url", "image_url": {"url": data_url}},
+                                ],
+                            }
+                        ],
                     )
-                    await asyncio.sleep(wait)
-                else:
-                    logger.error("OpenRouter OCR failed after %d attempts: %s", _MAX_RETRIES, exc)
-                    raise
+                    text = response.choices[0].message.content or ""
+                    return self._parse(text)
+                except Exception as exc:
+                    if attempt < _MAX_RETRIES - 1:
+                        wait = 2**attempt
+                        logger.warning(
+                            "OpenRouter OCR attempt %d failed, retrying in %ds: %s",
+                            attempt + 1, wait, exc,
+                        )
+                        await asyncio.sleep(wait)
+                    else:
+                        logger.error("OpenRouter OCR failed after %d attempts: %s", _MAX_RETRIES, exc)
+                        raise
 
     @staticmethod
     def _parse(text: str) -> OCRResult:
