@@ -8,7 +8,7 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 
 from app.core.sse import sse_manager
 from app.db.supabase import get_supabase
-from app.schemas.analysis import DoneEventData
+from app.schemas.analysis import DoneEventData, ErrorEventData
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analysis", tags=["analysis"])
@@ -32,7 +32,7 @@ async def stream_analysis(
 
     if not result.data:
         yield ServerSentEvent(
-            data={"message": "セッションが見つかりません"},
+            data=ErrorEventData(message="セッションが見つかりません").model_dump(),
             event="error",
         )
         return
@@ -55,7 +55,7 @@ async def stream_analysis(
     # エラー状態
     if session["status"] == "error":
         yield ServerSentEvent(
-            data={"message": "処理中にエラーが発生しました"},
+            data=ErrorEventData(message="処理中にエラーが発生しました").model_dump(),
             event="error",
         )
         return
@@ -70,7 +70,7 @@ async def stream_analysis(
             item = await asyncio.wait_for(queue.get(), timeout=1800.0)
         except asyncio.TimeoutError:
             yield ServerSentEvent(
-                data={"message": "処理がタイムアウトしました"},
+                data=ErrorEventData(message="処理がタイムアウトしました").model_dump(),
                 event="error",
             )
             return

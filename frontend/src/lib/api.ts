@@ -93,6 +93,8 @@ export async function getHistory(token: string): Promise<HistoryItem[]> {
     headers: authHeaders(token),
   })
   if (!res.ok) throw new Error('履歴の取得に失敗しました')
-  const data = await res.json()
-  return data.sessions ?? []
+  const data: unknown = await res.json()
+  if (!data || typeof data !== 'object') return []
+  const sessions = (data as { sessions?: unknown }).sessions
+  return Array.isArray(sessions) ? (sessions as HistoryItem[]) : []
 }

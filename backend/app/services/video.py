@@ -207,7 +207,10 @@ async def download_youtube_to_r2(url: str, session_id: str) -> None:
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
+                timeout=600,
             )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("yt-dlp がタイムアウトしました (600秒)") from exc
         except FileNotFoundError as exc:
             raise RuntimeError("yt-dlp がインストールされていません (pip install yt-dlp)") from exc
 

@@ -76,7 +76,7 @@
 **履歴ページ修正・SSE バグ修正・テスト追加をまとめてコミット・PR 作成。**
 
 1. 未コミットの変更（`analysis.py` + `test_analysis_sse.py` + 今回の履歴修正）をコミット
-2. PR 作成（`feature/phase5-tests` → `main`）
+2. PR 作成（`feature/phase5-tests` → `develop`）
 3. Phase 4 デプロイへ進む
 
 ---
