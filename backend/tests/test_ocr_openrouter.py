@@ -1,5 +1,5 @@
 import json
-from contextlib import asynccontextmanager
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -31,7 +31,7 @@ def _make_response(content: str) -> MagicMock:
     return resp
 
 
-def _mock_openrouter(send_async: AsyncMock):
+def _mock_openrouter(send_async: AsyncMock) -> tuple[Any, MagicMock]:
     """OpenRouter の async context manager をモックするヘルパー。"""
     mock_client = MagicMock()
     mock_client.chat.send_async = send_async
@@ -50,7 +50,8 @@ async def test_recognize_returns_damages(
     ctx, _ = _mock_openrouter(send)
 
     with ctx:
-        result = await service.recognize(mock_image)
+        async with service:
+            result = await service.recognize(mock_image)
 
     assert result.damages == [100, 200, 300]
 
@@ -62,7 +63,8 @@ async def test_recognize_filters_non_positive_values(
     ctx, _ = _mock_openrouter(send)
 
     with ctx:
-        result = await service.recognize(mock_image)
+        async with service:
+            result = await service.recognize(mock_image)
 
     assert result.damages == [100, 200]
 
@@ -74,7 +76,8 @@ async def test_recognize_strips_markdown_code_block(
     ctx, _ = _mock_openrouter(send)
 
     with ctx:
-        result = await service.recognize(mock_image)
+        async with service:
+            result = await service.recognize(mock_image)
 
     assert result.damages == [500]
 
@@ -86,7 +89,8 @@ async def test_recognize_empty_damages(
     ctx, _ = _mock_openrouter(send)
 
     with ctx:
-        result = await service.recognize(mock_image)
+        async with service:
+            result = await service.recognize(mock_image)
 
     assert result.damages == []
 
@@ -99,8 +103,9 @@ async def test_recognize_retries_on_failure_then_succeeds(
     ctx, mock_client = _mock_openrouter(send)
 
     with ctx:
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            result = await service.recognize(mock_image)
+        async with service:
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await service.recognize(mock_image)
 
     assert result.damages == [150]
     assert mock_client.chat.send_async.call_count == 2
@@ -113,8 +118,16 @@ async def test_recognize_raises_after_max_retries(
     ctx, mock_client = _mock_openrouter(send)
 
     with ctx:
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            with pytest.raises(Exception, match="API error"):
-                await service.recognize(mock_image)
+        async with service:
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                with pytest.raises(Exception, match="API error"):
+                    await service.recognize(mock_image)
 
     assert mock_client.chat.send_async.call_count == 3
+
+
+async def test_recognize_raises_without_context_manager(
+    service: OpenRouterOCRService, mock_image: Image.Image
+) -> None:
+    with pytest.raises(RuntimeError, match="not initialized"):
+        await service.recognize(mock_image)
