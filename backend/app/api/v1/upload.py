@@ -37,32 +37,33 @@ async def _process_video(session_id: str, user_id: Optional[str]) -> None:
         damage_values: list[int] = []
         prev_damage: Optional[int] = None
 
-        async for frame_index, timestamp_ms, image in video.extract_frames(body):
-            result = await ocr.recognize(image)
-            for damage_value in result.damages:
-                if aggregator.is_duplicate(damage_value, prev_damage):
-                    continue
-                prev_damage = damage_value
-                damage_values.append(damage_value)
+        async with ocr:
+            async for frame_index, timestamp_ms, image in video.extract_frames(body):
+                result = await ocr.recognize(image)
+                for damage_value in result.damages:
+                    if aggregator.is_duplicate(damage_value, prev_damage):
+                        continue
+                    prev_damage = damage_value
+                    damage_values.append(damage_value)
 
-                if user_id:
-                    await db.table("damage_logs").insert({
-                        "session_id": session_id,
-                        "timestamp_ms": timestamp_ms,
-                        "damage_value": damage_value,
-                        "frame_index": frame_index,
-                    }).execute()
+                    if user_id:
+                        await db.table("damage_logs").insert({
+                            "session_id": session_id,
+                            "timestamp_ms": timestamp_ms,
+                            "damage_value": damage_value,
+                            "frame_index": frame_index,
+                        }).execute()
 
-                # 動画の総フレーム数は事前不明のため、最大 50 分（3,000,000ms）で正規化
-                progress = min(99, int(timestamp_ms / (50 * 60 * 1000) * 100))
-                await queue.put({
-                    "event": "damage",
-                    "data": {
-                        "timestamp_ms": timestamp_ms,
-                        "damage_value": damage_value,
-                        "progress": progress,
-                    },
-                })
+                    # 動画の総フレーム数は事前不明のため、最大 50 分（3,000,000ms）で正規化
+                    progress = min(99, int(timestamp_ms / (50 * 60 * 1000) * 100))
+                    await queue.put({
+                        "event": "damage",
+                        "data": {
+                            "timestamp_ms": timestamp_ms,
+                            "damage_value": damage_value,
+                            "progress": progress,
+                        },
+                    })
 
         summary = aggregator.compute_summary(damage_values)
         await db.table("analysis_sessions").update({

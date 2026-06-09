@@ -3,8 +3,9 @@ import base64
 import json
 import logging
 from io import BytesIO
+from types import TracebackType
 
-from openai import AsyncOpenAI
+from openrouter import OpenRouter
 from PIL import Image
 
 from app.services.ocr.base import OCRResult, OCRServiceBase
@@ -23,13 +24,31 @@ _MAX_RETRIES = 3
 
 class OpenRouterOCRService(OCRServiceBase):
     def __init__(self, api_key: str, model: str) -> None:
-        self._client = AsyncOpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=api_key,
-        )
+        self._api_key = api_key
         self._model = model
+        self._client: OpenRouter | None = None
+        self._client_cm: OpenRouter | None = None
+
+    async def __aenter__(self) -> "OpenRouterOCRService":
+        self._client_cm = OpenRouter(api_key=self._api_key)
+        self._client = await self._client_cm.__aenter__()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        if self._client_cm is not None:
+            await self._client_cm.__aexit__(exc_type, exc, tb)
+        self._client = None
+        self._client_cm = None
 
     async def recognize(self, frame: Image.Image) -> OCRResult:
+        if self._client is None:
+            raise RuntimeError("OpenRouter client is not initialized. Use 'async with' to manage the client.")
+
         buf = BytesIO()
         frame.save(buf, format="JPEG")
         b64 = base64.b64encode(buf.getvalue()).decode()
@@ -37,7 +56,7 @@ class OpenRouterOCRService(OCRServiceBase):
 
         for attempt in range(_MAX_RETRIES):
             try:
-                response = await self._client.chat.completions.create(
+                response = await self._client.chat.send_async(
                     model=self._model,
                     messages=[
                         {

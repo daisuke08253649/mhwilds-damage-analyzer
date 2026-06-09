@@ -3,7 +3,7 @@ uvicorn[standard]
 python-multipart
 supabase
 boto3
-openai
+openrouter
 pillow
 python-magic
 python-magic-bin; sys_platform == "win32"
