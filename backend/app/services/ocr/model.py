@@ -19,7 +19,13 @@ _PROMPT = (
     'If no damage numbers are visible, return {"damages": []}. '
     "Do not include any other text."
 )
-_MAX_RETRIES = 3
+_MAX_RETRIES = 5
+_RATE_LIMIT_WAIT = 30  # 429 発生時の待機秒数
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    exc_str = str(exc).lower()
+    return "429" in exc_str or "too many requests" in exc_str or "rate limit" in exc_str
 
 
 class OpenRouterOCRService(OCRServiceBase):
@@ -72,7 +78,7 @@ class OpenRouterOCRService(OCRServiceBase):
                 return self._parse(text)
             except Exception as exc:
                 if attempt < _MAX_RETRIES - 1:
-                    wait = 2**attempt
+                    wait = _RATE_LIMIT_WAIT if _is_rate_limit_error(exc) else 2**attempt
                     logger.warning(
                         "OpenRouter OCR attempt %d failed, retrying in %ds: %s",
                         attempt + 1, wait, exc,

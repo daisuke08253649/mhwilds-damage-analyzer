@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from PIL import Image
 
-from app.services.ocr.model import OpenRouterOCRService
+from app.services.ocr.model import OpenRouterOCRService, _is_rate_limit_error
 
 
 @pytest.fixture
@@ -123,7 +123,31 @@ async def test_recognize_raises_after_max_retries(
                 with pytest.raises(Exception, match="API error"):
                     await service.recognize(mock_image)
 
-    assert mock_client.chat.send_async.call_count == 3
+    assert mock_client.chat.send_async.call_count == 5
+
+
+async def test_recognize_rate_limit_waits_longer(
+    service: OpenRouterOCRService, mock_image: Image.Image
+) -> None:
+    success = _make_response(json.dumps({"damages": [200]}))
+    send = AsyncMock(side_effect=[Exception("429 Too Many Requests"), success])
+    ctx, _ = _mock_openrouter(send)
+
+    with ctx:
+        async with service:
+            with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                result = await service.recognize(mock_image)
+
+    assert result.damages == [200]
+    mock_sleep.assert_called_once_with(30)
+
+
+def test_is_rate_limit_error_detects_429() -> None:
+    assert _is_rate_limit_error(Exception("429 Too Many Requests"))
+    assert _is_rate_limit_error(Exception("Provider returned error: too many requests"))
+    assert _is_rate_limit_error(Exception("rate limit exceeded"))
+    assert not _is_rate_limit_error(Exception("Provider returned error"))
+    assert not _is_rate_limit_error(Exception("API error"))
 
 
 async def test_recognize_raises_without_context_manager(
