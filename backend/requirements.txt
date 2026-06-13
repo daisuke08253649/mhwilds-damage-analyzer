@@ -3,11 +3,12 @@ uvicorn[standard]
 python-multipart
 supabase
 boto3
-google-generativeai
+google-genai
 pillow
 python-magic
+python-magic-bin; sys_platform == "win32"
 yt-dlp
 slowapi
-pydantic-settings
+python-dotenv
 python-jose[cryptography]
 httpx
