@@ -203,6 +203,7 @@ async def download_youtube_to_r2(url: str, session_id: str) -> None:
                     "--merge-output-format", "mp4",
                     "-o", tmp_path,
                     "--no-playlist",
+                    "--js-runtimes", "nodejs",
                     url,
                 ],
                 stdout=subprocess.DEVNULL,
