@@ -217,7 +217,7 @@ async def download_youtube_to_r2(url: str, session_id: str) -> None:
 
         if result.returncode != 0:
             stderr_text = (result.stderr or b"").decode("utf-8", errors="replace").strip()
-            detail = f": {stderr_text[:300]}" if stderr_text else ""
+            detail = f": {stderr_text[:2000]}" if stderr_text else ""
             raise RuntimeError(f"yt-dlp が失敗しました (returncode={result.returncode}){detail}")
 
         if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
