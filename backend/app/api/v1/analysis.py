@@ -64,16 +64,25 @@ async def stream_analysis(
     # ここでは remove() を呼ばず、再接続時に同一キューを再利用できるようにする。
     # クライアント切断時は FastAPI が aclose() を呼び CancelledError を発生させる。
     # 暗黙の伝搬でフレームワーク層がクリーンアップを行う。
+    _HEARTBEAT_INTERVAL = 30.0
+    _MAX_TOTAL_WAIT = 1800.0  # 最大 30 分
+    elapsed = 0.0
+
     queue = sse_manager.get_or_create(session_id)
     while True:
         try:
-            item = await asyncio.wait_for(queue.get(), timeout=1800.0)
+            item = await asyncio.wait_for(queue.get(), timeout=_HEARTBEAT_INTERVAL)
         except asyncio.TimeoutError:
-            yield ServerSentEvent(
-                data=ErrorEventData(message="処理がタイムアウトしました").model_dump(),
-                event="error",
-            )
-            return
+            elapsed += _HEARTBEAT_INTERVAL
+            if elapsed >= _MAX_TOTAL_WAIT:
+                yield ServerSentEvent(
+                    data=ErrorEventData(message="処理がタイムアウトしました").model_dump(),
+                    event="error",
+                )
+                return
+            # 30秒ごとにハートビートを送信してリバースプロキシの接続切断を防ぐ
+            yield ServerSentEvent(comment="heartbeat")
+            continue
 
         if item is None:
             return

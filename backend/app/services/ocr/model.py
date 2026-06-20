@@ -30,7 +30,17 @@ class GeminiOCRService(OCRServiceBase):
     async def recognize(self, frame: Image.Image) -> OCRResult:
         for attempt in range(_MAX_RETRIES):
             try:
-                return await asyncio.to_thread(self._recognize_sync, frame)
+                return await asyncio.wait_for(
+                    asyncio.to_thread(self._recognize_sync, frame),
+                    timeout=30.0,
+                )
+            except asyncio.TimeoutError as exc:
+                if attempt < _MAX_RETRIES - 1:
+                    logger.warning("Gemini OCR attempt %d timed out, retrying", attempt + 1)
+                    await asyncio.sleep(2**attempt)
+                else:
+                    logger.error("Gemini OCR timed out after %d attempts", _MAX_RETRIES)
+                    raise RuntimeError("Gemini OCR がタイムアウトしました (30秒)") from exc
             except Exception as exc:
                 if attempt < _MAX_RETRIES - 1:
                     wait = 2**attempt
