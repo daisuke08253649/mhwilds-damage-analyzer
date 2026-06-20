@@ -1,6 +1,5 @@
 import React from 'react'
 import { UploadDropzone } from '@/components/upload/UploadDropzone'
-import { VideoUrlInput } from '@/components/upload/VideoUrlInput'
 
 export default function HomePage(): React.JSX.Element {
   return (
@@ -19,14 +18,6 @@ export default function HomePage(): React.JSX.Element {
         </div>
 
         <UploadDropzone />
-
-        <div className="flex items-center gap-4">
-          <div className="flex-1 h-px bg-[var(--border)]" />
-          <span className="text-xs tracking-widest uppercase text-[var(--text-muted)]">または</span>
-          <div className="flex-1 h-px bg-[var(--border)]" />
-        </div>
-
-        <VideoUrlInput />
       </div>
     </div>
   )
