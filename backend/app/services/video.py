@@ -1,13 +1,21 @@
 import asyncio
+import base64
+import binascii
 import concurrent.futures
 import logging
+import os
+import shutil
 import subprocess
+import tempfile
 import threading
 from io import BytesIO
 from typing import AsyncIterator
 
 from botocore.response import StreamingBody
 from PIL import Image
+
+from app.core.config import get_settings
+from app.services import r2
 
 logger = logging.getLogger(__name__)
 
@@ -182,11 +190,6 @@ async def extract_frames(body: StreamingBody) -> AsyncIterator[tuple[int, int, I
 
 async def download_youtube_to_r2(url: str, session_id: str) -> None:
     """yt-dlp で YouTube 動画をダウンロードし R2 に保存する。"""
-    import os
-    import shutil
-    import tempfile
-
-    from app.services import r2
 
     # NamedTemporaryFile で事前に空ファイルを作ると Windows で yt-dlp の rename が
     # 失敗し 0 バイトファイルが R2 にアップロードされる問題を避けるため mkdtemp を使う
@@ -194,18 +197,35 @@ async def download_youtube_to_r2(url: str, session_id: str) -> None:
     tmp_path = os.path.join(tmp_dir, "video.mp4")
 
     try:
+        cmd = [
+            "yt-dlp",
+            "-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]",
+            "--merge-output-format", "mp4",
+            "-o", tmp_path,
+            "--no-playlist",
+            "--js-runtimes", "node:/usr/bin/nodejs",
+        ]
+
+        settings = get_settings()
+        if settings.youtube_cookies_b64:
+            try:
+                cookies_data = base64.b64decode(settings.youtube_cookies_b64, validate=True)
+            except (binascii.Error, ValueError) as exc:
+                raise RuntimeError(f"YOUTUBE_COOKIES_B64 のデコードに失敗しました: {exc}") from exc
+            if not cookies_data.lstrip().startswith(b"# Netscape HTTP Cookie File"):
+                raise RuntimeError("YOUTUBE_COOKIES_B64 が Netscape Cookie 形式ではありません")
+            cookies_path = os.path.join(tmp_dir, "cookies.txt")
+            with open(cookies_path, "wb") as cf:
+                cf.write(cookies_data)
+            cmd.extend(["--cookies", cookies_path])
+            logger.info("YouTube Cookie を使用します")
+
+        cmd.append(url)
+
         try:
             result = await asyncio.to_thread(
                 subprocess.run,
-                [
-                    "yt-dlp",
-                    "-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]",
-                    "--merge-output-format", "mp4",
-                    "-o", tmp_path,
-                    "--no-playlist",
-                    "--js-runtimes", "node:/usr/bin/nodejs",
-                    url,
-                ],
+                cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 timeout=600,
