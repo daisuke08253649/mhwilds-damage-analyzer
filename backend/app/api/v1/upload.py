@@ -75,14 +75,19 @@ async def _process_video(session_id: str, user_id: Optional[str]) -> None:
         await queue.put({"event": "done", "data": summary.model_dump()})
         await queue.put(None)
 
-    except Exception as exc:
+    except BaseException as exc:
         logger.error("セッション %s の処理に失敗: %s", session_id, exc)
         try:
             await db.table("analysis_sessions").update({"status": "error"}).eq("id", session_id).execute()
         except Exception:
             pass
-        await queue.put({"event": "error", "data": {"message": str(exc)}})
-        await queue.put(None)
+        try:
+            await queue.put({"event": "error", "data": {"message": str(exc) or type(exc).__name__}})
+            await queue.put(None)
+        except Exception:
+            pass
+        if isinstance(exc, asyncio.CancelledError):
+            raise
     finally:
         try:
             await r2.delete_object(session_id)
