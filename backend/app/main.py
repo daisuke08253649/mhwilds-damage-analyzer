@@ -9,6 +9,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.api.v1 import analysis, history, results, upload
 from app.core.config import get_settings
 from app.core.security import limiter
+from app.db.supabase import get_supabase
 from app.schemas.health import HealthResponse
 
 logging.basicConfig(level=logging.INFO)
@@ -38,4 +39,10 @@ app.include_router(history.router, prefix="/api/v1")
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    return HealthResponse(status="ok")
+    try:
+        client = await get_supabase()
+        await client.table("analysis_sessions").select("id").limit(1).execute()
+        db_status = "ok"
+    except Exception:
+        db_status = "error"
+    return HealthResponse(status="ok", db=db_status)
