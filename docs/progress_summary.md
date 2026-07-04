@@ -6,6 +6,8 @@
 
 ## ✅ 完了済みのタスク
 
+`tasks.md` の Phase 0〜Phase 4 は全項目完了。Phase 5（テスト・品質保証）は本番バグ修正まで完了し、残りはE2E確認等の検証タスクのみ（下記「作業中・未完了のタスク」参照）。
+
 ### Phase 0 — 環境構築・基盤整備
 - モノレポ構成でリポジトリ作成（`frontend/` / `backend/` / `supabase/`）
 - Next.js・FastAPI プロジェクト初期化、`.env.example` 整備
@@ -55,22 +57,23 @@
 | 8 | `CancelledError` 発生時にエラー SSE が送信されない | `except Exception` が `BaseException` をキャッチしない | `except BaseException` に変更し、エラーイベント送信後に `raise` で再スロー |
 | 9 | Render のリバースプロキシが SSE 接続を切断する | アイドル状態の HTTP 接続が一定時間でタイムアウト | SSE ハートビート（30 秒ごとに `comment` 送信）を追加。合計 1800 秒でタイムアウトエラーを送信 |
 
-### Supabase 非アクティブ停止対策（2026-06-27）
-- `/health` エンドポイントに Supabase DB ping を追加
-  - 呼び出し時に `analysis_sessions` へ SELECT を実行し DB アクティビティを発生させる
-  - DB エラー時も `status: "ok"` を返し、`db` フィールドで状態を表現
+### Supabase 非アクティブ停止対策・第1弾（2026-06-27・効果不十分だったため第2弾に移行）
+- `/health` エンドポイントに Supabase DB ping（SELECT）を追加
   - 変更ファイル：`backend/app/main.py` / `backend/app/schemas/health.py`
-- `feature/keep-alive-health` ブランチで実装 → develop・main にマージ済み
-- **→ 上記だけでは停止問題が解決せず、以下の追加対策を実施（2026-07-04）**
+  - `feature/keep-alive-health` ブランチで実装 → develop・main にマージ済み
+- → GAS → Render(`/health`) → Supabase という経路が、Render 無料プランのスリープ・コールドスタートで途切れる可能性があり、停止問題は解決しなかった
 
-### Supabase 非アクティブ停止対策・第2弾（2026-07-04）
+### Supabase 非アクティブ停止対策・第2弾（2026-07-04・完了）
 
-前回の `/health` 経由の対策（`GAS → Render(/health) → Supabase`）は、Render 無料プランのスリープ・コールドスタートに阻まれ、GAS の `UrlFetchApp` がタイムアウトして Supabase まで到達しない可能性があると判明。そこで **Render を経由せず GAS から Supabase に直接書き込む**方式に変更した。
+Render を経由せず、**GAS から Supabase の REST API (PostgREST) に直接 INSERT** する方式に変更。Renderの起動状態に一切依存しないため、より確実。
 
 - 新規テーブル `keep_alive_pings`（`id`, `pinged_at timestamptz default now()`）を追加
   - マイグレーション：`supabase/migrations/20260704000000_create_keep_alive_pings.sql`
   - RLS：`anon` ロールに対して INSERT のみ許可するポリシーを設定（SELECT/UPDATE/DELETE は不可）
-- GAS 側の実行関数を `pingHealth`（Render `/health` 呼び出し）から `pingSupabaseKeepAlive`（Supabase REST API に直接 POST）に差し替え
+  - CodeRabbit のレビュー指摘を受け、`grant insert on public.keep_alive_pings to anon;` を追加（RLSポリシーだけではPostgREST経由のGRANT権限が不足し `42501` エラーになるため）
+- PR #10 として作成 → CodeRabbitレビュー対応済み → `main` にマージ済み、`develop` にも取り込み済み
+- `supabase link --project-ref ctuuxnpupxzxyxzomlrs` → `supabase db push` で本番DBへの適用を完了・確認済み（`supabase migration list` で local/remote 一致を確認）
+- GAS 側の実行関数を `pingHealth`（Render `/health` 呼び出し）から `pingSupabaseKeepAlive`（Supabase REST API に直接 POST）に差し替えるコードをユーザーに提示済み
 
 ```javascript
 function pingSupabaseKeepAlive() {
@@ -94,28 +97,29 @@ function pingSupabaseKeepAlive() {
 }
 ```
 
-- スクリプトプロパティに `SUPABASE_URL`（例: `https://xxxx.supabase.co`）と `SUPABASE_ANON_KEY` を設定する
-- 既存の日次トリガーはそのまま使い、実行関数だけ `pingSupabaseKeepAlive` に差し替える
-- 旧 `HEALTH_API` プロパティ・`pingHealth` 関数は不要になるが削除は必須ではない
+- 本番 Supabase URL: `https://ctuuxnpupxzxyxzomlrs.supabase.co`
+- anon key は機密性を考慮しコマンド出力には表示せず、ユーザー自身が Supabase ダッシュボード（Settings → API）または Vercel の環境変数 `NEXT_PUBLIC_SUPABASE_ANON_KEY` から取得する方針とした
 - バックエンドの `/health` エンドポイントは変更なし（一般的なヘルスチェックとして継続利用）
 
 ---
 
 ## 🔧 作業中・未完了のタスク
 
-### GAS の設定（ユーザー側で実施が必要・要更新）
+### GAS の設定（ユーザー側で実施が必要・コード面の準備は完了）
 
-Supabase の非アクティブ停止を防ぐため、GAS で1日1回 `keep_alive_pings` テーブルに直接 INSERT するトリガーをユーザー自身が設定する必要がある（Render 経由の旧方式から変更）。
+本番DBへのテーブル反映は完了済み。あとはユーザー側でGASの設定を行うのみ：
 
-上記「Supabase 非アクティブ停止対策・第2弾」の `pingSupabaseKeepAlive` 関数を GAS に貼り付け、日次トリガーを設定する：
+1. Supabaseダッシュボード → Settings → API から anon key を取得（または Vercel の `NEXT_PUBLIC_SUPABASE_ANON_KEY` を流用）
+2. GAS のスクリプトプロパティに `SUPABASE_URL`（`https://ctuuxnpupxzxyxzomlrs.supabase.co`）と `SUPABASE_ANON_KEY` を設定
+3. 上記 `pingSupabaseKeepAlive` 関数を貼り付け
+4. 手動実行してログで `status: 201` を確認
+5. トリガーの実行関数を `pingHealth` → `pingSupabaseKeepAlive` に差し替え（日次・時刻は既存のままでよい）
+6. Supabase Table Editor で `keep_alive_pings` に行が増えていることを確認
+7. 旧 `pingHealth` 関数・`HEALTH_API` プロパティは残っていても害はないが、トリガーの対象だけは必ず切り替えること
 
-- スクリプトプロパティ `SUPABASE_URL` に本番 Supabase プロジェクト URL、`SUPABASE_ANON_KEY` に本番 anon key を設定
-- `supabase db push` で本番に `keep_alive_pings` テーブルが反映されていることを確認してから実行すること
-- 実行関数を `pingSupabaseKeepAlive` に指定してトリガー登録：時間主導型 → 日付ベースのタイマー → 任意の時刻
-- 手動実行してログで `status: 201` を確認し、Supabase Studio（本番）で `keep_alive_pings` に行が増えていることを確認
-- 既存の `pingHealth` 関数・`HEALTH_API` プロパティは残っていても害はないが、トリガーの実行関数は必ず `pingSupabaseKeepAlive` に切り替えること
+**この設定が完了・動作確認できるまでは、今回のSupabase停止対策は「未検証」の状態。次回再開時にまずこの確認結果を聞くこと。**
 
-### その他 Phase 5 残タスク
+### その他 Phase 5 残タスク（未着手）
 
 - [ ] ファイルアップロードの E2E フロー確認（本番環境で短い MP4 をアップロードして解析完了まで確認）
 - [ ] 50 分動画でのパフォーマンス・メモリ使用量確認
@@ -125,9 +129,9 @@ Supabase の非アクティブ停止を防ぐため、GAS で1日1回 `keep_aliv
 
 ## 👉 次のアクション（再開時の起点）
 
-1. **`supabase db push` で本番に `keep_alive_pings` テーブルを反映し、GAS の設定を完了させる**（ユーザー側の作業）
-   - スクリプトプロパティに `SUPABASE_URL` / `SUPABASE_ANON_KEY` を設定し、実行関数を `pingSupabaseKeepAlive` にして日次トリガーを有効化
-   - 手動実行でログ（`status: 201`）を確認し、Supabase Studio で `keep_alive_pings` に行が増えていることを確認
+1. **GAS設定の動作確認結果をユーザーに確認する**（最優先）
+   - 上記手順でGAS設定が完了しているか、`status: 201` が確認できたか、`keep_alive_pings` に行が増えているかを聞く
+   - まだの場合は設定をサポートする。数日〜1週間様子を見て、Supabaseが実際に停止しなくなったかも合わせて確認するとよい
 
 2. **ファイルアップロードの E2E フローを確認する**
    - https://mhwilds-damage-analyzer.vercel.app で短い MP4 をアップロード
@@ -145,9 +149,12 @@ Supabase の非アクティブ停止を防ぐため、GAS で1日1回 `keep_aliv
 
 ## ⚠️ 懸念事項・確認が必要な点
 
-- **Supabase 停止ポリシー**: 「1週間程度の非アクティブで停止」というポリシーが変更されている可能性がある。実装前に公式ドキュメントで現在の条件を確認推奨
-- **Render 無料プランのスリープ**: 15 分間リクエストがないとスリープする。GAS の1日1回 ping では解決しない。現時点では対策なし（許容する方針）
+- **Supabase 停止ポリシー（調査済み）**: 無料プランは7日間「DBへの実際のクエリ活動」がないと停止する。ダッシュボード閲覧やキャッシュ済みAPIレスポンスはカウントされないが、SELECT/INSERTなど実クエリはカウントされる。今回の`keep_alive_pings`への日次INSERTはこの条件を満たす設計だが、実際に停止しなくなるかは数日〜1週間の運用で要観察
+- **Supabaseのデフォルト権限の変更（新たに判明）**: Supabaseは2026年5月30日以降に作成された新規プロジェクトから「テーブル作成時にanon/authenticatedへ自動GRANTしない」設定がデフォルトになった。今回のプロジェクトは2025年作成のため影響は薄いが、**今後新しいテーブルを追加する際はRLSポリシーだけでなく明示的な`grant`文も必要になる可能性がある点に注意**（`keep_alive_pings`のCodeRabbit指摘で判明）
+- **pg_cronは不採用**: プロジェクトが一度停止するとコンピュートごと止まり内部cronジョブも道連れで止まるため、「自分で自分を起こす」用途には使えないと判断済み（再検討不要）
+- **Render 無料プランのスリープ**: 15 分間リクエストがないとスリープする。今回の対策はSupabase側の停止のみを防ぐものであり、**Render自体のスリープ問題は未解決のまま**（許容する方針）。ユーザーが実際にアプリを使う際は初回アクセスでコールドスタート待ちが発生し得る
 - **Gemini API 無料枠**: 長時間動画では消費量が大きくなる可能性がある。`GEMINI_MODEL` 環境変数で別モデルに切り替え可能
 - **OCR タイムアウト（30 秒）の妥当性**: Gemini API のレスポンスが安定して 30 秒以内に返るか未確認。問題が続く場合はタイムアウト値を調整する
 - **YouTube URL 機能**: フロントエンドから非表示にしたが、バックエンドの `POST /api/v1/upload/youtube` エンドポイントは残存。将来的に対応する場合は Cookie 認証（`YOUTUBE_COOKIES_B64`）の仕組みを実装済み
 - **Supabase 本番 RLS**: ダッシュボードで RLS が有効になっているか目視確認を推奨
+- **ローカルSupabase起動不可（開発環境固有の問題）**: このマシンではWindows/DockerのポートbindingがHyper-V/WSLの動的ポート予約と衝突し、`supabase start`がポート`54322`で失敗する。マイグレーションのローカル`db reset`検証ができないため、今後も新規マイグレーション追加時はSQL構文を目視で慎重に確認する必要がある
