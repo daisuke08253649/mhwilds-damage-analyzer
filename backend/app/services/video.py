@@ -23,7 +23,23 @@ _SOI = b"\xff\xd8"
 _EOI = b"\xff\xd9"
 _CHUNK_SIZE = 1024 * 1024  # 1 MB
 _FPS = 2
+_STDERR_TAIL_BYTES = 4096
 _SENTINEL = object()
+
+
+def _drain_and_close_queue(queue: "asyncio.Queue[object]") -> None:
+    """キューに残ったフレームを取り出し、image.close() で即座に解放する。"""
+    while True:
+        try:
+            item = queue.get_nowait()
+        except Exception:
+            break
+        if isinstance(item, tuple) and len(item) == 3:
+            _, _, discarded_image = item
+            try:
+                discarded_image.close()
+            except Exception:
+                pass
 
 
 async def extract_frames(body: StreamingBody) -> AsyncIterator[tuple[int, int, Image.Image]]:
@@ -50,12 +66,14 @@ async def extract_frames(body: StreamingBody) -> AsyncIterator[tuple[int, int, I
 
     def producer() -> None:
         try:
+            max_width = get_settings().frame_max_width
             try:
                 proc = subprocess.Popen(
                     [
                         "ffmpeg",
+                        "-loglevel", "error",
                         "-i", "pipe:0",
-                        "-vf", f"fps={_FPS}",
+                        "-vf", f"fps={_FPS},scale='min({max_width},iw)':-2",
                         "-f", "image2pipe",
                         "-vcodec", "mjpeg",
                         "-q:v", "3",
@@ -68,7 +86,8 @@ async def extract_frames(body: StreamingBody) -> AsyncIterator[tuple[int, int, I
             except FileNotFoundError as exc:
                 raise RuntimeError("ffmpeg がインストールされていません") from exc
 
-            stderr_chunks: list[bytes] = []
+            # OOM対策のため全量保持はせず、末尾 _STDERR_TAIL_BYTES 分だけ残す
+            stderr_tail = bytearray()
 
             def read_stderr() -> None:
                 assert proc.stderr is not None
@@ -77,7 +96,9 @@ async def extract_frames(body: StreamingBody) -> AsyncIterator[tuple[int, int, I
                         chunk = proc.stderr.read(4096)
                         if not chunk:
                             break
-                        stderr_chunks.append(chunk)
+                        stderr_tail.extend(chunk)
+                        if len(stderr_tail) > _STDERR_TAIL_BYTES:
+                            del stderr_tail[: len(stderr_tail) - _STDERR_TAIL_BYTES]
                 except Exception:
                     pass
 
@@ -151,8 +172,8 @@ async def extract_frames(body: StreamingBody) -> AsyncIterator[tuple[int, int, I
                     proc.wait()
 
             if not stop_event.is_set() and proc.returncode != 0:
-                stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace").strip()
-                detail = f": {stderr_text[-500:]}" if stderr_text else ""
+                stderr_text = bytes(stderr_tail).decode("utf-8", errors="replace").strip()
+                detail = f": {stderr_text}" if stderr_text else ""
                 logger.error("ffmpeg stderr: %s", stderr_text)
                 raise RuntimeError(f"ffmpeg が失敗しました (returncode={proc.returncode}){detail}")
 
@@ -174,12 +195,9 @@ async def extract_frames(body: StreamingBody) -> AsyncIterator[tuple[int, int, I
             yield item
     finally:
         stop_event.set()
-        # キューを排出して _enqueue のブロックを解除する
-        while True:
-            try:
-                queue.get_nowait()
-            except Exception:
-                break
+        # キューを排出して _enqueue のブロックを解除する。
+        # 破棄するフレームは image.close() で即座にメモリを解放する。
+        _drain_and_close_queue(queue)
         run_loop = asyncio.get_running_loop()
         await run_loop.run_in_executor(None, body.close)
         try:

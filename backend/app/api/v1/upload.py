@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from datetime import datetime, timezone
@@ -39,7 +40,10 @@ async def _process_video(session_id: str, user_id: Optional[str]) -> None:
 
         async with ocr:
             async for frame_index, timestamp_ms, image in video.extract_frames(body):
-                result = await ocr.recognize(image)
+                try:
+                    result = await ocr.recognize(image)
+                finally:
+                    image.close()
                 for damage_value in result.damages:
                     if aggregator.is_duplicate(damage_value, prev_damage):
                         continue
