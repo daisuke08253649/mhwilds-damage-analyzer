@@ -56,18 +56,18 @@ cp .env.example .env.local
 
 After `supabase start`, fill in the printed keys. See the table below for all variables and where to get them.
 
-| Variable                                                                           | Used by  | Source                                           |
-| ---------------------------------------------------------------------------------- | -------- | ------------------------------------------------ |
-| `NEXT_PUBLIC_SUPABASE_URL`                                                         | Frontend | `supabase start` output                          |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`                                                    | Frontend | `supabase start` output                          |
-| `NEXT_PUBLIC_API_BASE_URL`                                                         | Frontend | FastAPI local URL                                |
-| `SUPABASE_URL`                                                                     | Backend  | `supabase start` output                          |
-| `SUPABASE_SERVICE_ROLE_KEY`                                                        | Backend  | `supabase start` output                          |
-| `SUPABASE_JWT_SECRET`                                                              | Backend  | `supabase start` output                          |
-| `R2_ENDPOINT_URL` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` | Backend  | Cloudflare dashboard                             |
-| `OPENROUTER_API_KEY`                                                               | Backend  | [OpenRouter](https://openrouter.ai/)             |
-| `OPENROUTER_MODEL`                                                                 | Backend  | `google/gemma-4-26b-a4b-it:free` (default)       |
-| `OCR_BACKEND`                                                                      | Backend  | `openrouter` (default) or `finetuned`            |
+| Variable                                                                           | Used by  | Source                                     |
+| ---------------------------------------------------------------------------------- | -------- | ------------------------------------------ |
+| `NEXT_PUBLIC_SUPABASE_URL`                                                         | Frontend | `supabase start` output                    |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`                                                    | Frontend | `supabase start` output                    |
+| `NEXT_PUBLIC_API_BASE_URL`                                                         | Frontend | FastAPI local URL                          |
+| `SUPABASE_URL`                                                                     | Backend  | `supabase start` output                    |
+| `SUPABASE_SERVICE_ROLE_KEY`                                                        | Backend  | `supabase start` output                    |
+| `SUPABASE_JWT_SECRET`                                                              | Backend  | `supabase start` output                    |
+| `R2_ENDPOINT_URL` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` | Backend  | Cloudflare dashboard                       |
+| `OPENROUTER_API_KEY`                                                               | Backend  | [OpenRouter](https://openrouter.ai/)       |
+| `OPENROUTER_MODEL`                                                                 | Backend  | `google/gemma-4-26b-a4b-it:free` (default) |
+| `OCR_BACKEND`                                                                      | Backend  | `openrouter` (default) or `finetuned`      |
 
 ## Architecture
 
@@ -273,15 +273,16 @@ After each phase is complete, **always stop and provide a summary of the impleme
 - Steps to confirm the implementation works correctly
 ```
 
-> "Implementation is complete. Please share the above summary with OpenCode for a code review. I will wait for the feedback before committing."
+> "Implementation is complete. Please share the above summary with Codex for a code review. I will wait for the feedback before committing."
 
-Do not run `git add` or `git commit` until the user has shared the OpenCode review results.
+Do not run `git add` or `git commit` until the user has shared the Codex review results.
 
 Repeat the following cycle until the review returns no issues:
 
-1. Receive OpenCode review feedback from the user
+1. Receive Codex review feedback from the user
+
 2. Fix all flagged issues
-3. Notify the user: "Fixes are complete. Please run the OpenCode review again."
+3. Notify the user: "Fixes are complete. Please run the Codex review again."
 4. Wait for the next review
 
 Once the review returns no issues, commit and push:

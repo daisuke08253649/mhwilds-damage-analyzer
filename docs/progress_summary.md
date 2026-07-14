@@ -1,6 +1,6 @@
 # 実装進捗サマリー
 
-最終更新: 2026-07-04
+最終更新: 2026-07-14
 
 ---
 
@@ -105,19 +105,9 @@ function pingSupabaseKeepAlive() {
 
 ## 🔧 作業中・未完了のタスク
 
-### GAS の設定（ユーザー側で実施が必要・コード面の準備は完了）
+### GAS の設定（2026-07-14 完了・動作確認済み）
 
-本番DBへのテーブル反映は完了済み。あとはユーザー側でGASの設定を行うのみ：
-
-1. Supabaseダッシュボード → Settings → API から anon key を取得（または Vercel の `NEXT_PUBLIC_SUPABASE_ANON_KEY` を流用）
-2. GAS のスクリプトプロパティに `SUPABASE_URL`（`https://ctuuxnpupxzxyxzomlrs.supabase.co`）と `SUPABASE_ANON_KEY` を設定
-3. 上記 `pingSupabaseKeepAlive` 関数を貼り付け
-4. 手動実行してログで `status: 201` を確認
-5. トリガーの実行関数を `pingHealth` → `pingSupabaseKeepAlive` に差し替え（日次・時刻は既存のままでよい）
-6. Supabase Table Editor で `keep_alive_pings` に行が増えていることを確認
-7. 旧 `pingHealth` 関数・`HEALTH_API` プロパティは残っていても害はないが、トリガーの対象だけは必ず切り替えること
-
-**この設定が完了・動作確認できるまでは、今回のSupabase停止対策は「未検証」の状態。次回再開時にまずこの確認結果を聞くこと。**
+GAS 側の `pingSupabaseKeepAlive` への切り替え・動作確認（`status: 201` および `keep_alive_pings` への行追加）をユーザーが完了済み。Supabase 非アクティブ停止対策は検証完了とみなしてよい。
 
 ### その他 Phase 5 残タスク（未着手）
 
@@ -129,20 +119,16 @@ function pingSupabaseKeepAlive() {
 
 ## 👉 次のアクション（再開時の起点）
 
-1. **GAS設定の動作確認結果をユーザーに確認する**（最優先）
-   - 上記手順でGAS設定が完了しているか、`status: 201` が確認できたか、`keep_alive_pings` に行が増えているかを聞く
-   - まだの場合は設定をサポートする。数日〜1週間様子を見て、Supabaseが実際に停止しなくなったかも合わせて確認するとよい
-
-2. **ファイルアップロードの E2E フローを確認する**
+1. **ファイルアップロードの E2E フローを確認する**（最優先・未実施）
    - https://mhwilds-damage-analyzer.vercel.app で短い MP4 をアップロード
    - 解析中にダメージログがリアルタイムで流れ、完了後にサマリーが表示されるか確認
    - Render のログ（Dashboard → Logs）も同時に確認し、エラーが出ていないか見る
 
-3. **E2E が正常に動いた場合**
+2. **E2E が正常に動いた場合**
    - 50 分動画でのメモリ・処理時間を確認
    - Gemini API 消費量のモニタリング設定
 
-4. **E2E でエラーが出た場合**
+3. **E2E でエラーが出た場合**
    - Render のログと SSE のエラーメッセージを確認してから対処
 
 ---
