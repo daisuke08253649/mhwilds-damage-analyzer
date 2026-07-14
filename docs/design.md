@@ -662,6 +662,7 @@ User        Frontend        Backend         FFmpeg       Gemini API    DB
 | `GEMINI_API_KEY` | Gemini API キー |
 | `OCR_BACKEND` | `gemini`（デフォルト）または `finetuned` |
 | `MAX_UPLOAD_SIZE_MB` | アップロード上限サイズ（MB） |
+| `FRAME_MAX_WIDTH` | OCRに渡す前にフレームを縮小する最大幅（px、デフォルト1280、正の整数のみ） |
 | `ALLOWED_ORIGINS` | CORS 許可オリジン（カンマ区切り） |
 
 > `SUPABASE_SERVICE_ROLE_KEY` はバックエンドのみで使用し、フロントエンドには絶対に公開しない。
