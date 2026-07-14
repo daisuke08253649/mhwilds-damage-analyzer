@@ -290,7 +290,7 @@ Once the review returns no issues, commit and push:
 ```bash
 git add . && git commit -m "feat: describe what you implemented"
 git push origin feature/your-feature-name
-gh pr create --title "feat: ..." --body "## Summary
+gh pr create --base develop --title "feat: ..." --body "## Summary
 - What and why
 
 ## Changes
@@ -300,4 +300,10 @@ gh pr create --title "feat: ..." --body "## Summary
 - How to verify"
 ```
 
-> `gh` requires [GitHub CLI](https://cli.github.com/) (`gh auth login`). Target branch: `main`.
+> `gh` requires [GitHub CLI](https://cli.github.com/) (`gh auth login`). **Target branch: `develop`** (not `main`).
+
+### Release Flow (`develop` → `main`)
+
+1. Each feature/fix branch is merged into `develop` via PR after review
+2. Once `develop` is stable and final testing (E2E, manual QA) passes, `develop` is merged into `main` as a release
+3. Never open a feature/fix PR directly against `main`
