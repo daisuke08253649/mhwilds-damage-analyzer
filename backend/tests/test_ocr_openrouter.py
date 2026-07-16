@@ -1,6 +1,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from PIL import Image
 
@@ -98,6 +99,27 @@ async def test_recognize_raises_on_safety_filter_none_text(
         with patch("asyncio.sleep"):
             with pytest.raises(RuntimeError, match="safety filter"):
                 await service.recognize(mock_image)
+
+
+def test_client_receives_timeout_in_milliseconds() -> None:
+    with patch("app.services.ocr.model.genai.Client") as mock_client_cls:
+        GeminiOCRService(api_key="dummy-test-key", model="gemma-4-26b-a4b-it", timeout_seconds=12.5)
+
+    _, kwargs = mock_client_cls.call_args
+    assert kwargs["api_key"] == "dummy-test-key"
+    assert kwargs["http_options"].timeout == 12500
+
+
+async def test_recognize_normalizes_httpx_timeout_on_final_attempt(
+    service: GeminiOCRService, mock_image: Image.Image
+) -> None:
+    with patch.object(
+        service._client.models,
+        "generate_content",
+        side_effect=httpx.TimeoutException("read timed out"),
+    ), patch("asyncio.sleep"):
+        with pytest.raises(RuntimeError, match="タイムアウトしました"):
+            await service.recognize(mock_image)
 
 
 async def test_recognize_raises_on_safety_filter_exception(
