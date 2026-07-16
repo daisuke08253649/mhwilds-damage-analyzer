@@ -9,4 +9,8 @@ def get_ocr_service() -> OCRServiceBase:
     if settings.ocr_backend == "finetuned":
         return CustomModelOCRService()
 
-    return GeminiOCRService(api_key=settings.gemini_api_key, model=settings.gemini_model)
+    return GeminiOCRService(
+        api_key=settings.gemini_api_key,
+        model=settings.gemini_model,
+        timeout_seconds=settings.gemini_ocr_timeout_seconds,
+    )

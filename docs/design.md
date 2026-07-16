@@ -660,6 +660,8 @@ User        Frontend        Backend         FFmpeg       Gemini API    DB
 | `R2_SECRET_ACCESS_KEY` | R2 シークレットアクセスキー（**厳重管理**） |
 | `R2_BUCKET_NAME` | R2 バケット名 |
 | `GEMINI_API_KEY` | Gemini API キー |
+| `GEMINI_MODEL` | 使用するモデルID。未設定時は `gemini-3.1-flash-lite`（有料ティアあり・レート制限が公式に明記）。ローカルでの無料枠テストには `gemma-4-26b-a4b-it` 等のGemmaモデルも指定可能（無料ティア専用・レート制限非公開のため本番非推奨） |
+| `GEMINI_OCR_TIMEOUT_SECONDS` | Gemini OCR 1リクエストあたりのタイムアウト秒数（未設定時は45、1秒未満は起動時エラー） |
 | `OCR_BACKEND` | `gemini`（デフォルト）または `finetuned` |
 | `MAX_UPLOAD_SIZE_MB` | アップロード上限サイズ（MB） |
 | `FRAME_MAX_WIDTH` | OCRに渡す前にフレームを縮小する最大幅（px、デフォルト1280、正の整数のみ） |

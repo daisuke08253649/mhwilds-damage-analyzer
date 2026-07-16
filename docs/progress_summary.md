@@ -1,166 +1,53 @@
-# 実装進捗サマリー
+## 実装進捗サマリー
 
 最終更新: 2026-07-14
 
----
+### ✅ 完了済みのタスク
 
-## ✅ 完了済みのタスク
+`tasks.md` の Phase 0〜4 は全項目完了。Phase 5（テスト・品質保証）はユニットテストと本番バグ修正まで完了。
 
-`tasks.md` の Phase 0〜Phase 4 は全項目完了。Phase 5（テスト・品質保証）は本番バグ修正まで完了し、残りはE2E確認等の検証タスクのみ（下記「作業中・未完了のタスク」参照）。
+- **Phase 0〜4**: モノレポ構成・DB/RLS・バックエンド全機能・フロントエンド全画面・Vercel/Render/Supabase本番デプロイ、すべて完了済み
+  - Render: https://mhwilds-damage-analyzer.onrender.com
+  - Vercel: https://mhwilds-damage-analyzer.vercel.app
+- **Phase 5（進行中）**:
+  - ユニットテスト全パス確認済み（backend: 38件）
+  - 本番環境で発生した各種バグ（CORS、Supabase接続、yt-dlp/Node.js、SSE安定性等）は順次修正済み
+- **Supabase 非アクティブ停止対策**（2026-07-14 完了・動作確認済み）
+  - GAS から Supabase REST API (PostgREST) に直接 INSERT する `keep_alive_pings` テーブル方式に変更
+  - GAS 側の `pingSupabaseKeepAlive` への切り替え・動作確認（`status: 201`、テーブルへの行追加）をユーザーが完了・確認済み
+- **Render本番環境のOOM対策**（2026-07-14 実装・レビュー完了・develop/mainへマージ済み）
+  - 本番E2Eで動画解析が途中で停止する不具合が発生。原因はOCR前にフレームを元動画解像度のまま未圧縮でメモリ展開していたこと
+  - 対応：FFmpegでOCR前にフレームを縮小（`FRAME_MAX_WIDTH`環境変数、デフォルト1280px）、OCR後に`image.close()`で即時解放、キャンセル・例外時のキュー内フレームも確実にclose、ffmpeg stderrの無制限保持を末尾4KBに制限、`FRAME_MAX_WIDTH`起動時バリデーション追加
+  - 副次的に発見した既存バグ（`upload.py`で`asyncio`未importによる`NameError`）も修正
+  - Codexレビューを複数ラウンド実施し指摘事項を全て反映。テスト38件全てパス
+  - PR #11（`fix/render-oom-frame-memory` → `develop`）をマージ → `develop`を`main`にマージ・push済み
+- **CLAUDE.mdのGitワークフロー記載を修正**
+  - 「PRは`main`ではなく`develop`をターゲットにする」「develop→mainの昇格は最終テスト後に行う」という想定フローに合わせて記載を修正済み
 
-### Phase 0 — 環境構築・基盤整備
-- モノレポ構成でリポジトリ作成（`frontend/` / `backend/` / `supabase/`）
-- Next.js・FastAPI プロジェクト初期化、`.env.example` 整備
-- Supabase ローカル環境構築、Cloudflare R2 バケット作成
+### 🔧 作業中・未完了のタスク
 
-### Phase 1 — データベース構築
-- `analysis_sessions` / `damage_logs` テーブル DDL・インデックス作成
-- RLS ポリシー設定（`auth.uid() = user_id`）
-- マイグレーション `20250401000000`〜`20250401000002` 作成済み
+- **本番E2Eフローの再確認（OOM修正後）が未実施**：前回のE2Eで解析途中に停止する不具合が発生し、それを修正した状態。修正後の再検証はまだ行っていない
+- Renderのデプロイトリガーが`main`起点か`develop`起点か未確認
+- 50分動画でのパフォーマンス・メモリ使用量確認：未着手
+- Gemini API消費量モニタリング設定：未着手
 
-### Phase 2 — バックエンド実装
-- 全モジュール実装済み（config / security / supabase / r2 / video / ocr / aggregator）
-- 全 API エンドポイント実装済み（upload / analysis / results / history）
-- バックグラウンド処理フロー完成
+### 👉 次のアクション（再開時の起点）
 
-### Phase 3 — フロントエンド実装
-- 全ページ・コンポーネント実装済み（`/` / `/analysis/[sessionId]` / `/auth/*` / `/history`）
-- SSE カスタムフック・ライブラリ実装済み
+1. Renderのデプロイ設定（デプロイトリガーとなるブランチ）を確認し、今回のOOM修正（`main`へのマージ内容）がRenderに反映されているか確認する
+2. 反映されていれば、本番サイト（https://mhwilds-damage-analyzer.vercel.app）で短いMP4を再度アップロードし、
+   - 解析が最後まで完了するか
+   - Render Dashboard → Metrics でメモリ使用量のピークが以前より下がっているか
+   - Render Dashboard → Logs にエラーが出ていないか
+   を確認する
+3. E2Eが正常に完了した場合：50分動画でのパフォーマンス・メモリ確認、Gemini API消費量モニタリング設定に着手する
+4. E2Eでまだ問題が出た場合：Renderのログとブラウザ側のSSEエラーメッセージを確認してから追加調査する
 
-### Phase 4 — デプロイ・本番設定（完了）
-- Supabase 本番プロジェクト作成・`supabase db push` で本番 DB にマイグレーション適用済み
-- Render（バックエンド）デプロイ済み
-  - URL: https://mhwilds-damage-analyzer.onrender.com
-- Vercel（フロントエンド）デプロイ済み
-  - URL: https://mhwilds-damage-analyzer.vercel.app
+### ⚠️ 懸念事項・確認が必要な点
 
-### Phase 5 — テスト・バグ修正
-- ユニットテスト 26 件全パス確認済み
-- 本番環境 E2E 確認中に発生したバグを順次修正済み
-
-#### 本番環境で修正したバグ（〜2026-06-17）
-
-| # | 症状 | 原因 | 修正内容 |
-|---|---|---|---|
-| 1 | CORS エラー | `ALLOWED_ORIGINS` 末尾に `/` がついていた | Render 環境変数から末尾スラッシュを削除 |
-| 2 | 500エラー（Supabase） | `SUPABASE_URL` に `/rest/v1` が含まれ二重パスになっていた | Render 環境変数をホスト名のみに修正 |
-| 3 | yt-dlp に Node.js が必要 | Dockerfile に Node.js が未インストール | `nodejs` パッケージを Dockerfile に追加 |
-| 4 | yt-dlp が Node.js を認識しない | Debian では `nodejs` バイナリ名が `node` でない | Dockerfile に `node` → `nodejs` シンボリックリンク追加、`--js-runtimes node:/usr/bin/nodejs` 指定 |
-| 5 | stderr ログが途中で切れる | `stderr_text[:300]` で切り捨てていた | 上限を 2000 文字に拡張 |
-
-#### 本番環境で修正したバグ（2026-06-20）
-
-| # | 症状 | 原因 | 修正内容 |
-|---|---|---|---|
-| 6 | YouTube URL 機能が動作しない | Render の IP を YouTube がボットとみなしブロック | YouTube URL 入力欄をフロントエンドから非表示に（`page.tsx` から `VideoUrlInput` を削除） |
-| 7 | SSE が途中で無音になりエラーが表示されない | OCR API 呼び出し（`generate_content`）にタイムアウトがなくバックグラウンドタスクが無期限ブロック | 30 秒タイムアウトを追加・リトライ処理に組み込み |
-| 8 | `CancelledError` 発生時にエラー SSE が送信されない | `except Exception` が `BaseException` をキャッチしない | `except BaseException` に変更し、エラーイベント送信後に `raise` で再スロー |
-| 9 | Render のリバースプロキシが SSE 接続を切断する | アイドル状態の HTTP 接続が一定時間でタイムアウト | SSE ハートビート（30 秒ごとに `comment` 送信）を追加。合計 1800 秒でタイムアウトエラーを送信 |
-
-### Supabase 非アクティブ停止対策・第1弾（2026-06-27・効果不十分だったため第2弾に移行）
-- `/health` エンドポイントに Supabase DB ping（SELECT）を追加
-  - 変更ファイル：`backend/app/main.py` / `backend/app/schemas/health.py`
-  - `feature/keep-alive-health` ブランチで実装 → develop・main にマージ済み
-- → GAS → Render(`/health`) → Supabase という経路が、Render 無料プランのスリープ・コールドスタートで途切れる可能性があり、停止問題は解決しなかった
-
-### Supabase 非アクティブ停止対策・第2弾（2026-07-04・完了）
-
-Render を経由せず、**GAS から Supabase の REST API (PostgREST) に直接 INSERT** する方式に変更。Renderの起動状態に一切依存しないため、より確実。
-
-- 新規テーブル `keep_alive_pings`（`id`, `pinged_at timestamptz default now()`）を追加
-  - マイグレーション：`supabase/migrations/20260704000000_create_keep_alive_pings.sql`
-  - RLS：`anon` ロールに対して INSERT のみ許可するポリシーを設定（SELECT/UPDATE/DELETE は不可）
-  - CodeRabbit のレビュー指摘を受け、`grant insert on public.keep_alive_pings to anon;` を追加（RLSポリシーだけではPostgREST経由のGRANT権限が不足し `42501` エラーになるため）
-- PR #10 として作成 → CodeRabbitレビュー対応済み → `main` にマージ済み、`develop` にも取り込み済み
-- `supabase link --project-ref ctuuxnpupxzxyxzomlrs` → `supabase db push` で本番DBへの適用を完了・確認済み（`supabase migration list` で local/remote 一致を確認）
-- GAS 側の実行関数を `pingHealth`（Render `/health` 呼び出し）から `pingSupabaseKeepAlive`（Supabase REST API に直接 POST）に差し替えるコードをユーザーに提示済み
-
-```javascript
-function pingSupabaseKeepAlive() {
-  const props = PropertiesService.getScriptProperties();
-  const url = props.getProperty('SUPABASE_URL') + '/rest/v1/keep_alive_pings';
-  const anonKey = props.getProperty('SUPABASE_ANON_KEY');
-
-  const response = UrlFetchApp.fetch(url, {
-    method: 'post',
-    headers: {
-      'apikey': anonKey,
-      'Authorization': 'Bearer ' + anonKey,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal'
-    },
-    payload: JSON.stringify({}),
-    muteHttpExceptions: true
-  });
-
-  Logger.log('status: %s / body: %s', response.getResponseCode(), response.getContentText());
-}
-```
-
-- 本番 Supabase URL: `https://ctuuxnpupxzxyxzomlrs.supabase.co`
-- anon key は機密性を考慮しコマンド出力には表示せず、ユーザー自身が Supabase ダッシュボード（Settings → API）または Vercel の環境変数 `NEXT_PUBLIC_SUPABASE_ANON_KEY` から取得する方針とした
-- バックエンドの `/health` エンドポイントは変更なし（一般的なヘルスチェックとして継続利用）
-
----
-
-## 🔧 作業中・未完了のタスク
-
-### GAS の設定（2026-07-14 完了・動作確認済み）
-
-GAS 側の `pingSupabaseKeepAlive` への切り替え・動作確認（`status: 201` および `keep_alive_pings` への行追加）をユーザーが完了済み。Supabase 非アクティブ停止対策は検証完了とみなしてよい。
-
-### ファイルアップロード E2E で発生した OOM 疑いの不具合（2026-07-14・修正PR作成済み）
-
-本番 E2E で短い MP4 をアップロードしたところ、解析が途中で停止（Render 側の OOM が疑われる）。原因調査の結果、OCR に渡す前のフレームを元動画の解像度のまま未圧縮 PIL Image としてメモリ展開しており、1フレームあたりの必要メモリが大きすぎたことが主因と判断。
-
-- 対応内容（`fix/render-oom-frame-memory` ブランチ、PR #11 → `main`）
-  - FFmpeg の `-vf` に `scale` フィルタを追加し、OCR前に最大幅 `FRAME_MAX_WIDTH`（デフォルト1280px、環境変数で調整可）まで縮小。上限以下の動画は拡大しない
-  - OCR実行後（成功・失敗問わず）に `image.close()` で即座にメモリ解放
-  - キャンセル・例外時にキューへ残ったフレームも `_drain_and_close_queue()` で確実に close
-  - FFmpeg に `-loglevel error` を指定し、stderr 保持を末尾4KBに制限（異常動画によるメモリ増加防止）
-  - `FRAME_MAX_WIDTH` の起動時バリデーション（正の整数のみ）を追加
-  - 副次的に発見した既存バグを修正：`upload.py` で `asyncio.CancelledError` を参照していたが `asyncio` が未import で、エラーハンドリング中に `NameError` が発生していた
-  - `.env.example` / `docs/design.md` に `FRAME_MAX_WIDTH` を追記
-  - Codex レビューを複数ラウンド実施し、指摘事項をすべて反映。ユニットテスト 38 件全てパス
-- Codex レビュー承認済み → コミット・プッシュ・PR #11 作成済み（`main` ターゲット）。**まだマージ未実施**
-- **PR がマージされたら `develop` にも取り込み（マージ or リベース）、Render に再デプロイされたことを確認したうえで、同じ短い MP4 で E2E を再実行し、今度は最後まで完了するか確認すること**
-
-### その他 Phase 5 残タスク（未着手）
-
-- [ ] 50 分動画でのパフォーマンス・メモリ使用量確認
-- [ ] Gemini API 消費量モニタリング設定
-
----
-
-## 👉 次のアクション（再開時の起点）
-
-1. **PR #11 のマージ状況を確認する**（最優先）
-   - 未マージなら、マージしてよいか・レビューの追加指摘がないかをユーザーに確認
-   - マージ済みなら `develop` への取り込み状況と Render への反映を確認
-
-2. **ファイルアップロードの E2E フローを再確認する**
-   - https://mhwilds-damage-analyzer.vercel.app で短い MP4 をアップロード
-   - 解析中にダメージログがリアルタイムで流れ、完了後にサマリーが表示されるか確認
-   - 前回と同様に途中で止まらないか、Render の Metrics でメモリ使用量のピークが下がっているかを確認
-   - Render のログ（Dashboard → Logs）も同時に確認し、エラーが出ていないか見る
-
-3. **E2E が正常に動いた場合**
-   - 50 分動画でのメモリ・処理時間を確認
-   - Gemini API 消費量のモニタリング設定
-
-4. **E2E でエラーが出た場合**
-   - Render のログと SSE のエラーメッセージを確認してから対処
-
----
-
-## ⚠️ 懸念事項・確認が必要な点
-
-- **Supabase 停止ポリシー（調査済み）**: 無料プランは7日間「DBへの実際のクエリ活動」がないと停止する。ダッシュボード閲覧やキャッシュ済みAPIレスポンスはカウントされないが、SELECT/INSERTなど実クエリはカウントされる。今回の`keep_alive_pings`への日次INSERTはこの条件を満たす設計だが、実際に停止しなくなるかは数日〜1週間の運用で要観察
-- **Supabaseのデフォルト権限の変更（新たに判明）**: Supabaseは2026年5月30日以降に作成された新規プロジェクトから「テーブル作成時にanon/authenticatedへ自動GRANTしない」設定がデフォルトになった。今回のプロジェクトは2025年作成のため影響は薄いが、**今後新しいテーブルを追加する際はRLSポリシーだけでなく明示的な`grant`文も必要になる可能性がある点に注意**（`keep_alive_pings`のCodeRabbit指摘で判明）
-- **pg_cronは不採用**: プロジェクトが一度停止するとコンピュートごと止まり内部cronジョブも道連れで止まるため、「自分で自分を起こす」用途には使えないと判断済み（再検討不要）
-- **Render 無料プランのスリープ**: 15 分間リクエストがないとスリープする。今回の対策はSupabase側の停止のみを防ぐものであり、**Render自体のスリープ問題は未解決のまま**（許容する方針）。ユーザーが実際にアプリを使う際は初回アクセスでコールドスタート待ちが発生し得る
-- **Gemini API 無料枠**: 長時間動画では消費量が大きくなる可能性がある。`GEMINI_MODEL` 環境変数で別モデルに切り替え可能
-- **OCR タイムアウト（30 秒）の妥当性**: Gemini API のレスポンスが安定して 30 秒以内に返るか未確認。問題が続く場合はタイムアウト値を調整する
-- **YouTube URL 機能**: フロントエンドから非表示にしたが、バックエンドの `POST /api/v1/upload/youtube` エンドポイントは残存。将来的に対応する場合は Cookie 認証（`YOUTUBE_COOKIES_B64`）の仕組みを実装済み
-- **Supabase 本番 RLS**: ダッシュボードで RLS が有効になっているか目視確認を推奨
-- **ローカルSupabase起動不可（開発環境固有の問題）**: このマシンではWindows/DockerのポートbindingがHyper-V/WSLの動的ポート予約と衝突し、`supabase start`がポート`54322`で失敗する。マイグレーションのローカル`db reset`検証ができないため、今後も新規マイグレーション追加時はSQL構文を目視で慎重に確認する必要がある
+- 今回のOOM修正（フレーム最大幅1280px、`FRAME_MAX_WIDTH`で調整可）は、実際の本番動画・Render環境ではまだ検証されていない。1280pxが画質・OCR精度とメモリ使用量のバランスとして適切かは、再E2E後に様子を見て要調整
+- Renderの自動デプロイトリガーが`main`か`develop`かが未確認のため、次回再開時に最初に確認する必要がある
+- develop→mainの昇格は過去の履歴（`Merge branch 'develop'`コミット）に倣い、PRを介さず直接`git merge`で実施している。この運用を続けるかは今後も要確認
+- Render 無料プランは15分アクセスがないとスリープする問題は引き続き未解決（許容する方針）。初回アクセス時にコールドスタート待ちが発生し得る
+- Gemini API 無料枠は長時間動画で消費量が大きくなる可能性がある（`GEMINI_MODEL`で別モデルへの切り替えは可能）
+- ローカルでの Supabase 起動不可の問題（Windows/Docker のポートbinding衝突）は継続中。新規マイグレーション追加時は `supabase db reset` でのローカル検証ができないため、SQL構文を目視で慎重に確認する必要がある
+- YouTube URL機能はフロントエンドから非表示にしたままだが、バックエンドの`POST /api/v1/upload/youtube`エンドポイントは残存（Cookie認証の仕組みは実装済み）
