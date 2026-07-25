@@ -4,12 +4,12 @@
 
 ### ✅ 完了済みのタスク
 
-`tasks.md` の Phase 0〜4 は全項目完了。Phase 5（テスト・品質保証）はユニットテストと本番バグ修正まで完了。
+`tasks.md` の Phase 0〜5 は全項目完了（50分動画でのパフォーマンス確認はユーザー判断によりスコープ外）。
 
 - **Phase 0〜4**: モノレポ構成・DB/RLS・バックエンド全機能・フロントエンド全画面・Vercel/Render/Supabase本番デプロイ、すべて完了済み
   - Render: https://mhwilds-damage-analyzer.onrender.com
   - Vercel: https://mhwilds-damage-analyzer.vercel.app
-- **Phase 5（進行中）**:
+- **Phase 5**:
   - ユニットテスト全パス確認済み（backend: 56件）
   - 本番環境で発生した各種バグ（CORS、Supabase接続、yt-dlp/Node.js、SSE安定性等）は順次修正済み
 - **Supabase 非アクティブ停止対策**（2026-07-14 完了・動作確認済み）
@@ -32,14 +32,10 @@
   - Renderの環境変数`GEMINI_MODEL`が`gemma-4-26b-a4b-it`に明示設定されたままだったのを`gemini-3.1-flash-lite`に変更・再デプロイ
   - 再デプロイ直後の1回目のアップロード試行はSSEストリームが503を返し「サーバーとの接続が切断されました」エラーになったが、再デプロイ直後のコールドスタート性のものと考えられ、少し時間を置いて手動で再アップロードしたところ成功
   - 成功時のRender Metricsでのメモリ使用量ピークは338MB（Render無料プランの512MB枠内に収まっている）、Logsに`Gemini OCR timed out`等のエラーは出ていないことを確認
+- **Gemini API消費量モニタリング設定完了（2026-07-25）**
+  - Google Cloud Console →「お支払い」→「予算とアラート」で予算アラートを設定済み（`gemini-3.1-flash-lite`への切り替えに伴う無料枠超過・課金リスクの監視）
 
-### 🔧 作業中・未完了のタスク
-
-- Gemini API消費量モニタリング設定：Google Cloud Console側での予算アラート設定を案内済み、ユーザー側での設定作業待ち（`gemini-3.1-flash-lite`は有料ティアありのため、無料枠超過時の課金リスクを踏まえて優先度高め）
-
-### 👉 次のアクション（再開時の起点）
-
-1. Gemini API消費量モニタリング設定の完了確認（Google Cloud Console →「お支払い」→「予算とアラート」でユーザーが設定）
+`tasks.md` Phase 0〜5はこれで全項目完了。次のセッション開始時は「今後の対応（Phase 5 以降）」セクション（OAuth対応・ファインチューニングモデル移行等）から着手を検討する。
 
 ### 📝 スコープ外と判断した項目
 
@@ -47,7 +43,6 @@
 
 ### ⚠️ 懸念事項・確認が必要な点
 
-- Render本番の`GEMINI_MODEL`を`gemini-3.1-flash-lite`（有料ティアあり）に変更したため、利用量次第では無料枠を超えて課金が発生する可能性がある。運用コスト0円方針（`requirements.md` 5.2）と照らして、実際の消費量モニタリングが必要（次のアクション1番）
 - `CLAUDE.md`の環境変数一覧に`OPENROUTER_API_KEY`/`OPENROUTER_MODEL`/`OCR_BACKEND=openrouter（デフォルト）`という記載が残っているが、実際のコードはOpenRouter実装を持たず（`OCR_BACKEND`は`gemini`または`finetuned`のみ）、これは過去に一度OpenRouter経由の実装を試した後Geminiへ戻した際の記載漏れと見られる。ドキュメントのドリフトとして別途整理が必要
 - Renderのデプロイトリガーは`main`起点であることを確認済み（2026-07-25）
 - develop→mainの昇格は過去の履歴（`Merge branch 'develop'`コミット）に倣い、PRを介さず直接`git merge`で実施している。この運用を続けるかは今後も要確認
